@@ -90,7 +90,7 @@ export async function processIsolation() {
       `SELECT c.id FROM customers c WHERE c.isolation_status='isolated' AND c.customer_status='active'
        AND NOT EXISTS (SELECT 1 FROM invoices i WHERE i.customer_id=c.id AND i.status IN ('unpaid','partial')
          AND TIMESTAMP(DATE_ADD(i.due_date, INTERVAL (c.due_grace_days + ?) DAY), ?) <= NOW())`
-      , [Number(settings.isolation_day_offset || 0), settings.isolation_time || '00:05:00']
+    , [Number(settings.isolation_day_offset || 0), settings.isolation_time || '00:05:00']
     );
     for (const customer of paidIsolated) {
       try { results.push({ customerId: customer.id, ...(await setCustomerProfile(customer.id, 'reactivate')) }); }

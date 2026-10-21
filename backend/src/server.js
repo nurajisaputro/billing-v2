@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import crypto from 'node:crypto';
 import cors from 'cors';
 import { pool } from './db.js';
 import { encryptSecret } from './crypto.js';
@@ -11,6 +12,108 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 const asyncRoute = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+const sessions = new Map();
+const roleAccess = {
+  superadmin: () => true,
+  admin: (path, method) => !path.startsWith('/settings') && !path.startsWith('/brand') && (!path.startsWith('/routers') || method === 'GET'),
+  kolektor: (path, method) => path.startsWith('/customers') || path.startsWith('/invoices') || path.startsWith('/payments') || path.startsWith('/reports/monthly') || path.startsWith('/profile') || (path === '/brand' && method === 'GET') || (['/bank-accounts','/packages','/routers'].includes(path) && method === 'GET') || (/^\/routers\/\d+\/ppp-profiles$/.test(path) && method === 'GET')
+};
+function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+  return `${salt}:${crypto.scryptSync(String(password), salt, 64).toString('hex')}`;
+}
+function verifyPassword(password, stored) {
+  try { const [salt, hash] = String(stored).split(':'); return crypto.timingSafeEqual(crypto.scryptSync(String(password), salt, 64), Buffer.from(hash, 'hex')); }
+  catch { return false; }
+}
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health' || req.path === '/auth/login' || req.path === '/auth/bootstrap' || (req.path === '/brand' && req.method === 'GET')) return next();
+  const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  const user = sessions.get(token);
+  if (!user) return res.status(401).json({ error: 'Sesi berakhir. Silakan login kembali.' });
+  req.user = user;
+  if (!(roleAccess[user.role]?.(req.path, req.method) ?? false)) return res.status(403).json({ error: 'Akses ditolak untuk role Anda.' });
+  next();
+});
+app.get('/api/auth/bootstrap', asyncRoute(async (_req,res) => {
+  const [[row]] = await pool.query('SELECT COUNT(*) total FROM users');
+  res.json({ needsSetup: Number(row.total) === 0 });
+}));
+app.post('/api/auth/bootstrap', asyncRoute(async (req,res) => {
+  const [[row]] = await pool.query('SELECT COUNT(*) total FROM users');
+  if (Number(row.total)) return res.status(409).json({ error: 'Setup awal sudah dilakukan.' });
+  const name=String(req.body.name||'Super Admin').trim(), username=String(req.body.username||'admin').trim(), password=String(req.body.password||'');
+  if (!name || !username || password.length < 8) return res.status(400).json({error:'Nama, username, dan password minimal 8 karakter wajib diisi.'});
+  const [r] = await pool.execute("INSERT INTO users (name,username,password_hash,role,active) VALUES (?,?,?,'superadmin',1)",[name,username,hashPassword(password)]);
+  const token=crypto.randomBytes(32).toString('hex'), user={id:r.insertId,name,username,role:'superadmin'};
+  sessions.set(token,user); res.status(201).json({token,user});
+}));
+app.post('/api/auth/login', asyncRoute(async (req,res) => {
+  const [rows]=await pool.execute('SELECT id,name,username,password_hash,role,active FROM users WHERE username=? LIMIT 1',[String(req.body.username||'').trim()]);
+  const u=rows[0];
+  if(!u||!u.active||!verifyPassword(req.body.password||'',u.password_hash))return res.status(401).json({error:'Username atau password salah.'});
+  const token=crypto.randomBytes(32).toString('hex'), user={id:u.id,name:u.name,username:u.username,role:u.role};
+  sessions.set(token,user);res.json({token,user});
+}));
+app.post('/api/auth/logout',(req,res)=>{sessions.delete(String(req.headers.authorization||'').replace(/^Bearer\s+/i,''));res.json({ok:true})});
+app.get('/api/profile',(req,res)=>res.json(req.user));
+app.put('/api/profile',asyncRoute(async(req,res)=>{
+  const name=String(req.body.name||'').trim(), password=String(req.body.password||'');
+  if(!name)return res.status(400).json({error:'Nama wajib diisi.'});
+  if(password&&password.length<8)return res.status(400).json({error:'Password baru minimal 8 karakter.'});
+  if(password)await pool.execute('UPDATE users SET name=?,password_hash=? WHERE id=?',[name,hashPassword(password),req.user.id]);
+  else await pool.execute('UPDATE users SET name=? WHERE id=?',[name,req.user.id]);
+  for(const [token,u] of sessions)if(u.id===req.user.id)sessions.set(token,{...u,name});
+  res.json({ok:true,name});
+}));
+app.get('/api/users',asyncRoute(async(_req,res)=>{const [rows]=await pool.query('SELECT id,name,username,role,active,created_at FROM users ORDER BY id');res.json(rows)}));
+app.post('/api/users',asyncRoute(async(req,res)=>{
+  const b=req.body,name=String(b.name||'').trim(),username=String(b.username||'').trim(),password=String(b.password||'');
+  if(!name||!username||password.length<8||!['superadmin','admin','kolektor'].includes(b.role))return res.status(400).json({error:'Nama, username, role, dan password minimal 8 karakter wajib diisi.'});
+  if(req.user.role==='admin'&&b.role==='superadmin')return res.status(403).json({error:'Admin tidak dapat membuat akun superadmin.'});
+  try{const [r]=await pool.execute('INSERT INTO users (name,username,password_hash,role,active) VALUES (?,?,?,?,1)',[name,username,hashPassword(password),b.role]);res.status(201).json({id:r.insertId})}
+  catch(e){if(e.code==='ER_DUP_ENTRY')return res.status(409).json({error:'Username sudah digunakan.'});throw e}
+}));
+app.put('/api/users/:id',asyncRoute(async(req,res)=>{
+  const b=req.body,id=Number(req.params.id);
+  if(id===req.user.id&&b.active===false)return res.status(400).json({error:'Anda tidak dapat menonaktifkan akun sendiri.'});
+  if(!['superadmin','admin','kolektor'].includes(b.role))return res.status(400).json({error:'Role tidak valid.'});
+  const [[cnt]]=await pool.query("SELECT COUNT(*) total FROM users WHERE role='superadmin' AND active=1");
+  const [target]=await pool.execute('SELECT role,active FROM users WHERE id=?',[id]);
+  if(!target.length)return res.status(404).json({error:'User tidak ditemukan.'});
+  if(req.user.role==='admin'&&(b.role==='superadmin'||target[0].role==='superadmin'))return res.status(403).json({error:'Admin tidak dapat mengubah akun superadmin.'});
+  if(target[0].role==='superadmin'&&target[0].active&&(b.role!=='superadmin'||b.active===false)&&Number(cnt.total)<=1)return res.status(400).json({error:'Minimal harus ada satu superadmin aktif.'});
+  await pool.execute('UPDATE users SET role=?,active=? WHERE id=?',[b.role,b.active===false?0:1,id]);res.json({ok:true});
+}));
+app.get('/api/brand',asyncRoute(async(_req,res)=>{const [rows]=await pool.query('SELECT brand_name FROM app_settings WHERE id=1');res.json({brand_name:rows[0]?.brand_name||'BillingNet'})}));
+app.put('/api/brand',asyncRoute(async(req,res)=>{const name=String(req.body.brand_name||'').trim();if(!name)return res.status(400).json({error:'Nama brand wajib diisi.'});await pool.execute('UPDATE app_settings SET brand_name=? WHERE id=1',[name]);res.json({ok:true,brand_name:name})}));
+app.get('/api/reports/monthly',asyncRoute(async(req,res)=>{
+  const month=String(req.query.month||new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit'}).format(new Date()));
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))return res.status(400).json({error:'Format bulan harus YYYY-MM'});
+  const [rows]=await pool.execute(`SELECT p.id,p.amount,p.paid_at,p.method,p.receipt_number,i.invoice_number,c.customer_code,c.name customer_name
+  FROM payments p JOIN invoices i ON i.id=p.invoice_id JOIN customers c ON c.id=i.customer_id
+  WHERE p.paid_at>=? AND p.paid_at<DATE_ADD(?,INTERVAL 1 MONTH) ORDER BY p.paid_at DESC`,[`${month}-01`,`${month}-01`]);
+  res.json({month,totalUsers:new Set(rows.map(r=>String(r.customer_code))).size,totalRevenue:rows.reduce((sum,r)=>sum+Number(r.amount||0),0),rows});
+}));
+app.get('/api/expenses',asyncRoute(async(_req,res)=>{const [rows]=await pool.query('SELECT * FROM expenses ORDER BY expense_date DESC,id DESC');res.json(rows)}));
+app.post('/api/expenses',asyncRoute(async(req,res)=>{
+  const b=req.body;if(!b.description||!Number(b.amount)||Number(b.amount)<=0||!b.expense_date)return res.status(400).json({error:'Deskripsi, nominal, dan tanggal pengeluaran wajib diisi.'});
+  const [r]=await pool.execute('INSERT INTO expenses (description,category,amount,expense_date,payment_method,notes,created_by) VALUES (?,?,?,?,?,?,?)',[b.description,b.category||'Lainnya',Number(b.amount),b.expense_date,b.payment_method||'cash',b.notes||null,req.user.username]);res.status(201).json({id:r.insertId});
+}));
+app.put('/api/expenses/:id',asyncRoute(async(req,res)=>{
+  const b=req.body;if(!b.description||!Number(b.amount)||Number(b.amount)<=0||!b.expense_date)return res.status(400).json({error:'Deskripsi, nominal, dan tanggal wajib diisi.'});
+  await pool.execute('UPDATE expenses SET description=?,category=?,amount=?,expense_date=?,payment_method=?,notes=? WHERE id=?',[b.description,b.category||'Lainnya',Number(b.amount),b.expense_date,b.payment_method||'cash',b.notes||null,req.params.id]);res.json({ok:true});
+}));
+app.get('/api/assets',asyncRoute(async(_req,res)=>{const [rows]=await pool.query('SELECT * FROM assets ORDER BY id DESC');res.json(rows)}));
+app.post('/api/assets',asyncRoute(async(req,res)=>{
+  const b=req.body,type=b.asset_type==='ont'?'ont':'other';if(!b.name||!b.serial_number)return res.status(400).json({error:'Nama aset dan nomor seri wajib diisi.'});
+  try{const [r]=await pool.execute('INSERT INTO assets (asset_type,name,serial_number,brand,model,quantity,condition_status,location,notes) VALUES (?,?,?,?,?,?,?,?,?)',[type,b.name,b.serial_number,b.brand||null,b.model||null,Math.max(1,Number(b.quantity||1)),b.condition_status||'baik',b.location||null,b.notes||null]);res.status(201).json({id:r.insertId})}
+  catch(e){if(e.code==='ER_DUP_ENTRY')return res.status(409).json({error:'Nomor seri sudah terdaftar.'});throw e}
+}));
+app.put('/api/assets/:id',asyncRoute(async(req,res)=>{
+  const b=req.body;if(!b.name||!b.serial_number)return res.status(400).json({error:'Nama aset dan nomor seri wajib diisi.'});
+  await pool.execute('UPDATE assets SET name=?,serial_number=?,brand=?,model=?,quantity=?,condition_status=?,location=?,notes=? WHERE id=?',[b.name,b.serial_number,b.brand||null,b.model||null,Math.max(1,Number(b.quantity||1)),b.condition_status||'baik',b.location||null,b.notes||null,req.params.id]);res.json({ok:true});
+}));
+
 
 app.get('/api/health', asyncRoute(async (_req, res) => {
   await pool.query('SELECT 1');
