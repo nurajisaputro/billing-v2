@@ -121,7 +121,7 @@ app.get('/api/health', asyncRoute(async (_req, res) => {
 }));
 
 app.get('/api/dashboard', asyncRoute(async (_req, res) => {
-  const [[customers]] = await pool.query("SELECT COUNT(*) total, SUM(customer_status='active') active, SUM(isolation_status='isolated') isolated FROM customers");
+  const [[customers]] = await pool.query("SELECT COUNT(*) total, SUM(active=1 AND customer_status='active' AND isolation_status<>'isolated') active, SUM(isolation_status='isolated') isolated, SUM(active=0) inactive FROM customers");
   const [[invoices]] = await pool.query("SELECT COUNT(*) total, SUM(status IN ('unpaid','partial')) unpaid_count, COALESCE(SUM(CASE WHEN status IN ('unpaid','partial') THEN amount-paid_amount ELSE 0 END),0) outstanding FROM invoices WHERE status <> 'void'");
   const [[payments]] = await pool.query("SELECT COALESCE(SUM(amount),0) today_total FROM payments WHERE DATE(paid_at)=CURDATE()");
   res.json({ customers, invoices, payments });
@@ -133,9 +133,22 @@ app.get('/api/dashboard/isolation-status', asyncRoute(async (_req, res) => {
 }));
 
 app.get('/api/customers', asyncRoute(async (_req, res) => {
-  const [rows] = await pool.query(`SELECT c.*, p.name package_name, p.price package_price, r.name router_name, r.host router_host, p.router_id package_router_id
-    FROM customers c LEFT JOIN packages p ON p.id=c.package_id LEFT JOIN routers r ON r.id=c.router_id ORDER BY c.id DESC`);
+  const [rows] = await pool.query(`SELECT c.*, p.name package_name, p.price package_price, r.name router_name, r.host router_host, p.router_id package_router_id, u.name collector_name,
+      COALESCE(c.invoice_day_override,bs.invoice_generation_day) invoice_day_effective, COALESCE(c.payment_start_day_override,bs.payment_start_day) payment_start_day_effective,
+      COALESCE(c.payment_end_day_override,bs.payment_end_day) payment_end_day_effective, COALESCE(c.grace_days_override,NULLIF(c.due_grace_days,0),bs.grace_days) grace_days_effective,
+      COALESCE(c.isolation_time_override,bs.isolation_time) isolation_time_effective
+    FROM customers c LEFT JOIN packages p ON p.id=c.package_id LEFT JOIN routers r ON r.id=c.router_id LEFT JOIN users u ON u.id=c.collector_id CROSS JOIN billing_settings bs WHERE bs.id=1 ORDER BY c.id DESC`);
   res.json(rows);
+}));
+
+app.put('/api/customers/collector/bulk', asyncRoute(async(req,res)=>{
+  const ids=Array.isArray(req.body.customer_ids)?req.body.customer_ids.map(Number).filter(Number.isInteger):[];
+  const collectorId=req.body.collector_id?Number(req.body.collector_id):null;
+  if(!ids.length)return res.status(400).json({error:'Pilih minimal satu pelanggan.'});
+  if(collectorId){const [u]=await pool.execute("SELECT id FROM users WHERE id=? AND role='kolektor' AND active=1",[collectorId]);if(!u.length)return res.status(400).json({error:'Kolektor tidak ditemukan atau tidak aktif.'});}
+  const marks=ids.map(()=>'?').join(',');
+  const [r]=await pool.execute(`UPDATE customers SET collector_id=? WHERE id IN (${marks})`,[collectorId,...ids]);
+  res.json({ok:true,updated:r.affectedRows});
 }));
 
 // Status pelanggan dicek dari router online dan sesi PPP aktif. Router/API gagal atau sesi tidak aktif ditampilkan Offline.
@@ -164,23 +177,36 @@ app.post('/api/customers', asyncRoute(async (req, res) => {
   const b = req.body;
   if (!b.customer_code || !b.name) return res.status(400).json({ error: 'Kode pelanggan dan nama wajib diisi' });
   const serviceType=b.service_type||'internet';
+  if(b.payment_start_day_override&&b.payment_end_day_override&&Number(b.payment_end_day_override)<Number(b.payment_start_day_override))return res.status(400).json({error:'Tanggal akhir masa pembayaran harus sama atau setelah tanggal mulai.'});
+  if(b.collector_id){const [collector]=await pool.execute("SELECT id FROM users WHERE id=? AND role='kolektor' AND active=1",[b.collector_id]);if(!collector.length)return res.status(400).json({error:'Kolektor tidak ditemukan atau tidak aktif.'});}
   if(serviceType==='tv_cable' && (b.router_id || b.pppoe_username)) return res.status(400).json({error:'Pelanggan TV kabel tidak memerlukan router atau username PPPoE'});
   if(serviceType!=='tv_cable' && (!b.router_id || !b.pppoe_username)) return res.status(400).json({error:'Pelanggan internet/bundle wajib memilih router dan username PPPoE'});
   if(serviceType!=='tv_cable' && b.package_id){const [pkgs]=await pool.execute('SELECT router_id FROM packages WHERE id=?',[b.package_id]);if(pkgs[0]?.router_id&&b.router_id&&Number(pkgs[0].router_id)!==Number(b.router_id))return res.status(400).json({error:'Router pelanggan harus sama dengan router pada paket yang dipilih'});}
   const [result] = await pool.execute(`INSERT INTO customers
-    (customer_code,name,phone,address,service_type,package_id,router_id,pppoe_username,billing_day,due_grace_days,isolation_enabled,notes)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, [b.customer_code,b.name,b.phone||null,b.address||null,serviceType,b.package_id||null,serviceType==='tv_cable'?null:(b.router_id||null),serviceType==='tv_cable'?null:(b.pppoe_username||null),Math.min(31,Math.max(1,Number(b.billing_day||1))),Math.max(0,Number(b.due_grace_days||0)),b.isolation_enabled===false?0:1,b.notes||null]);
+    (customer_code,name,phone,address,service_type,package_id,router_id,pppoe_username,billing_day,invoice_day_override,payment_start_day_override,payment_end_day_override,grace_days_override,isolation_time_override,collector_id,due_grace_days,active,skip_mass_isolation,isolation_enabled,notes)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [b.customer_code,b.name,b.phone||null,b.address||null,serviceType,b.package_id||null,serviceType==='tv_cable'?null:(b.router_id||null),serviceType==='tv_cable'?null:(b.pppoe_username||null),Math.min(31,Math.max(1,Number(b.billing_day||1))),b.invoice_day_override?Math.min(31,Math.max(1,Number(b.invoice_day_override))):null,b.payment_start_day_override?Math.min(31,Math.max(1,Number(b.payment_start_day_override))):null,b.payment_end_day_override?Math.min(31,Math.max(1,Number(b.payment_end_day_override))):null,b.grace_days_override!==''&&b.grace_days_override!==null&&b.grace_days_override!==undefined?Math.max(0,Number(b.grace_days_override)):null,b.isolation_time_override||null,b.collector_id||null,Math.max(0,Number(b.due_grace_days||0)),b.active===false?0:1,b.skip_mass_isolation?1:0,(b.isolation_enabled===false||b.skip_mass_isolation)?0:1,b.notes||null]);
   await logActivity('customer_created','customer',result.insertId,{customerCode:b.customer_code});
   res.status(201).json({ id: result.insertId });
 }));
 app.put('/api/customers/:id', asyncRoute(async (req,res) => {
   const b=req.body; const serviceType=b.service_type||'internet';
+  if(b.payment_start_day_override&&b.payment_end_day_override&&Number(b.payment_end_day_override)<Number(b.payment_start_day_override))return res.status(400).json({error:'Tanggal akhir masa pembayaran harus sama atau setelah tanggal mulai.'});
+  if(b.collector_id){const [collector]=await pool.execute("SELECT id FROM users WHERE id=? AND role='kolektor' AND active=1",[b.collector_id]);if(!collector.length)return res.status(400).json({error:'Kolektor tidak ditemukan atau tidak aktif.'});}
   if(serviceType==='tv_cable' && (b.router_id || b.pppoe_username)) return res.status(400).json({error:'Pelanggan TV kabel tidak memerlukan router atau username PPPoE'});
   if(serviceType!=='tv_cable' && (!b.router_id || !b.pppoe_username)) return res.status(400).json({error:'Pelanggan internet/bundle wajib memilih router dan username PPPoE'});
   if(serviceType!=='tv_cable' && b.package_id){const [pkgs]=await pool.execute('SELECT router_id FROM packages WHERE id=?',[b.package_id]);if(pkgs[0]?.router_id&&b.router_id&&Number(pkgs[0].router_id)!==Number(b.router_id))return res.status(400).json({error:'Router pelanggan harus sama dengan router pada paket yang dipilih'});}
-  await pool.execute(`UPDATE customers SET name=?,phone=?,address=?,service_type=?,package_id=?,router_id=?,pppoe_username=?,billing_day=?,due_grace_days=?,isolation_enabled=?,customer_status=?,notes=? WHERE id=?`,
-    [b.name,b.phone||null,b.address||null,serviceType,b.package_id||null,serviceType==='tv_cable'?null:(b.router_id||null),serviceType==='tv_cable'?null:(b.pppoe_username||null),Math.min(31,Math.max(1,Number(b.billing_day||1))),Math.max(0,Number(b.due_grace_days||0)),b.isolation_enabled?1:0,b.customer_status||'active',b.notes||null,req.params.id]);
+  await pool.execute(`UPDATE customers SET name=?,phone=?,address=?,service_type=?,package_id=?,router_id=?,pppoe_username=?,billing_day=?,invoice_day_override=?,payment_start_day_override=?,payment_end_day_override=?,grace_days_override=?,isolation_time_override=?,collector_id=?,due_grace_days=?,active=?,skip_mass_isolation=?,isolation_enabled=?,customer_status=?,notes=? WHERE id=?`,
+    [b.name,b.phone||null,b.address||null,serviceType,b.package_id||null,serviceType==='tv_cable'?null:(b.router_id||null),serviceType==='tv_cable'?null:(b.pppoe_username||null),Math.min(31,Math.max(1,Number(b.billing_day||1))),b.invoice_day_override?Math.min(31,Math.max(1,Number(b.invoice_day_override))):null,b.payment_start_day_override?Math.min(31,Math.max(1,Number(b.payment_start_day_override))):null,b.payment_end_day_override?Math.min(31,Math.max(1,Number(b.payment_end_day_override))):null,b.grace_days_override!==''&&b.grace_days_override!==null&&b.grace_days_override!==undefined?Math.max(0,Number(b.grace_days_override)):null,b.isolation_time_override||null,b.collector_id||null,Math.max(0,Number(b.due_grace_days||0)),b.active===false?0:1,b.skip_mass_isolation?1:0,(b.isolation_enabled===false||b.skip_mass_isolation)?0:1,b.customer_status||'active',b.notes||null,req.params.id]);
   await logActivity('customer_updated','customer',Number(req.params.id),{}); res.json({ok:true});
+}));
+app.delete('/api/customers/:id', asyncRoute(async(req,res)=>{
+  const [existing]=await pool.execute('SELECT id,name FROM customers WHERE id=?',[req.params.id]);
+  if(!existing.length)return res.status(404).json({error:'Pelanggan tidak ditemukan.'});
+  const [[counts]]=await pool.execute('SELECT COUNT(*) total FROM invoices WHERE customer_id=?',[req.params.id]);
+  if(Number(counts.total)>0)return res.status(409).json({error:'Pelanggan memiliki riwayat tagihan. Nonaktifkan pelanggan agar riwayat keuangan tetap aman.'});
+  await pool.execute('DELETE FROM customers WHERE id=?',[req.params.id]);
+  await logActivity('customer_deleted','customer',Number(req.params.id),{name:existing[0].name});
+  res.json({ok:true});
 }));
 
 app.get('/api/packages', asyncRoute(async (_req,res)=>{ const [rows]=await pool.query('SELECT p.*, r.name router_name, r.host router_host FROM packages p LEFT JOIN routers r ON r.id=p.router_id ORDER BY p.name'); res.json(rows); }));
@@ -249,13 +275,13 @@ app.get('/api/payments', asyncRoute(async (req, res) => {
   const total = rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
   res.json({ month, count: rows.length, total, rows });
 }));
-app.post('/api/invoices/generate', asyncRoute(async(req,res)=>{const count=await generateMonthlyInvoices(new Date());res.json({ok:true,created:count});}));
+app.post('/api/invoices/generate', asyncRoute(async(req,res)=>{const count=await generateMonthlyInvoices(new Date(),true);res.json({ok:true,created:count});}));
 app.post('/api/payments', asyncRoute(async(req,res)=>{const b=req.body;if(!b.invoice_id||!b.amount||!['cash','transfer'].includes(b.method))return res.status(400).json({error:'Tagihan, nominal, dan metode cash/transfer wajib diisi'});if(b.method==='transfer'&&!b.account_id)return res.status(400).json({error:'Pilih rekening tujuan untuk pembayaran transfer'});res.status(201).json(await recordPayment({invoiceId:b.invoice_id,amount:b.amount,method:b.method,accountId:b.account_id,referenceNumber:b.reference_number,notes:b.notes,createdBy:b.created_by||'admin'}));}));
 app.post('/api/customers/:id/isolate', asyncRoute(async(req,res)=>res.json(await setCustomerProfile(req.params.id,'isolate'))));
 app.post('/api/customers/:id/reactivate', asyncRoute(async(req,res)=>res.json(await setCustomerProfile(req.params.id,'reactivate'))));
 
 app.get('/api/settings/billing', asyncRoute(async(_req,res)=>{const [rows]=await pool.query('SELECT * FROM billing_settings WHERE id=1');res.json(rows[0]);}));
-app.put('/api/settings/billing', asyncRoute(async(req,res)=>{const b=req.body;await pool.execute('UPDATE billing_settings SET invoice_generation_day=?,isolation_day_offset=?,isolation_time=?,auto_reactivate=? WHERE id=1',[Math.min(28,Math.max(1,Number(b.invoice_generation_day||1))),Math.max(0,Number(b.isolation_day_offset||0)),b.isolation_time||'00:05:00',b.auto_reactivate?1:0]);await logActivity('billing_settings_updated','settings',1,b);res.json({ok:true});}));
+app.put('/api/settings/billing', asyncRoute(async(req,res)=>{const b=req.body;const start=Math.min(31,Math.max(1,Number(b.payment_start_day||1)));const end=Math.min(31,Math.max(start,Number(b.payment_end_day||13)));await pool.execute('UPDATE billing_settings SET invoice_generation_day=?,payment_start_day=?,payment_end_day=?,grace_days=?,isolation_day_offset=?,isolation_time=?,auto_reactivate=? WHERE id=1',[Math.min(31,Math.max(1,Number(b.invoice_generation_day||1))),start,end,Math.max(0,Number(b.grace_days??2)),Math.max(0,Number(b.isolation_day_offset||0)),b.isolation_time||'00:01:00',b.auto_reactivate?1:0]);await logActivity('billing_settings_updated','settings',1,b);res.json({ok:true});}));
 app.get('/api/logs', asyncRoute(async(_req,res)=>{const [rows]=await pool.query('SELECT * FROM activity_logs ORDER BY id DESC LIMIT 200');res.json(rows);}));
 
 app.use((err,_req,res,_next)=>{console.error(err);res.status(500).json({error:err.message||'Kesalahan server'});});
@@ -268,12 +294,8 @@ if(process.env.SCHEDULER_ENABLED==='true'){
   const tick = async () => {
     if(busy)return;busy=true;
     try {
-      const [rows] = await pool.query('SELECT invoice_generation_day FROM billing_settings WHERE id=1');
-      const generationDay = Number(rows[0]?.invoice_generation_day || 1);
-      if (new Date().getDate() === generationDay) {
-        const count = await generateMonthlyInvoices(new Date());
-        if (count) console.log(`Generated ${count} invoices`);
-      }
+      const count = await generateMonthlyInvoices(new Date(),false);
+      if (count) console.log(`Generated ${count} invoices`);
       await processIsolation();
     } catch(e) { console.error('Billing scheduler error:',e.message); }
     finally { busy=false; }

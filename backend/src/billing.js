@@ -5,18 +5,26 @@ const pad = (n) => String(n).padStart(2, '0');
 function dateOnly(date) { return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`; }
 function clampDay(year, monthIndex, day) { return Math.min(day, new Date(year, monthIndex + 1, 0).getDate()); }
 
-export async function generateMonthlyInvoices(now = new Date()) {
+export async function generateMonthlyInvoices(now = new Date(), force = false) {
+  const [settingsRows] = await pool.execute('SELECT * FROM billing_settings WHERE id=1');
+  const settings = settingsRows[0] || { invoice_generation_day: 1, payment_start_day: 1, payment_end_day: 13 };
+  const defaultDay = Number(settings.invoice_generation_day || 1);
   const [customers] = await pool.execute(
-    `SELECT c.id, c.package_id, c.billing_day, p.price FROM customers c JOIN packages p ON p.id=c.package_id
-     WHERE c.customer_status='active' AND p.active=1`
+    `SELECT c.id, c.package_id, c.invoice_day_override, c.payment_start_day_override, c.payment_end_day_override, p.price
+     FROM customers c JOIN packages p ON p.id=c.package_id
+     WHERE c.active=1 AND c.customer_status='active' AND p.active=1
+       AND (?=1 OR COALESCE(c.invoice_day_override, ?) = ?)`,
+    [force ? 1 : 0, defaultDay, now.getDate()]
   );
   let created = 0;
   for (const c of customers) {
     const year = now.getFullYear(); const month = now.getMonth();
     const start = new Date(year, month, 1);
     const end = new Date(year, month + 1, 0);
-    const issue = new Date(year, month, clampDay(year, month, Number(c.billing_day || 1)));
-    const due = new Date(year, month, clampDay(year, month, Number(c.billing_day || 1)));
+    const invoiceDay = clampDay(year, month, Number(c.invoice_day_override || defaultDay));
+    const paymentEndDay = clampDay(year, month, Number(c.payment_end_day_override || settings.payment_end_day || 13));
+    const issue = new Date(year, month, invoiceDay);
+    const due = new Date(year, month, paymentEndDay);
     try {
       await pool.execute(
         `INSERT INTO invoices (invoice_number, customer_id, package_id, period_start, period_end, issue_date, due_date, amount)
@@ -65,13 +73,14 @@ export async function recordPayment({ invoiceId, amount, method, accountId, refe
 
 export async function processIsolation() {
   const [settingsRows] = await pool.execute('SELECT * FROM billing_settings WHERE id=1');
-  const settings = settingsRows[0] || { isolation_day_offset: 0, isolation_time: '00:05:00', auto_reactivate: 1 };
+  const settings = settingsRows[0] || { isolation_day_offset: 0, isolation_time: '00:01:00', grace_days: 2, auto_reactivate: 1 };
   const [overdue] = await pool.execute(
     `SELECT DISTINCT c.id, c.isolation_status FROM customers c
      JOIN invoices i ON i.customer_id=c.id
-     WHERE c.customer_status='active' AND c.isolation_enabled=1 AND i.status IN ('unpaid','partial')
-       AND TIMESTAMP(DATE_ADD(i.due_date, INTERVAL (c.due_grace_days + ?) DAY), ?) <= NOW()`,
-    [Number(settings.isolation_day_offset || 0), settings.isolation_time || '00:05:00']
+     WHERE c.active=1 AND c.customer_status='active' AND c.isolation_enabled=1 AND c.skip_mass_isolation=0
+       AND i.status IN ('unpaid','partial')
+       AND TIMESTAMP(DATE_ADD(i.due_date, INTERVAL (COALESCE(c.grace_days_override, NULLIF(c.due_grace_days,0), ?) + COALESCE(?,0) + 1) DAY), COALESCE(c.isolation_time_override, ?)) <= NOW()`,
+    [Number(settings.grace_days ?? 2), Number(settings.isolation_day_offset || 0), settings.isolation_time || '00:01:00']
   );
   const { setCustomerProfile } = await import('./mikrotik.js');
   const results = [];
@@ -84,13 +93,12 @@ export async function processIsolation() {
       results.push({ customerId: customer.id, ok: false, error: e.message });
     }
   }
-
   if (Number(settings.auto_reactivate) === 1) {
     const [paidIsolated] = await pool.execute(
-      `SELECT c.id FROM customers c WHERE c.isolation_status='isolated' AND c.customer_status='active'
-       AND NOT EXISTS (SELECT 1 FROM invoices i WHERE i.customer_id=c.id AND i.status IN ('unpaid','partial')
-         AND TIMESTAMP(DATE_ADD(i.due_date, INTERVAL (c.due_grace_days + ?) DAY), ?) <= NOW())`
-    , [Number(settings.isolation_day_offset || 0), settings.isolation_time || '00:05:00']
+      `SELECT c.id FROM customers c WHERE c.active=1 AND c.isolation_status='isolated' AND c.customer_status='active'
+       AND (c.skip_mass_isolation=1 OR c.isolation_enabled=0 OR NOT EXISTS (SELECT 1 FROM invoices i WHERE i.customer_id=c.id AND i.status IN ('unpaid','partial')
+         AND TIMESTAMP(DATE_ADD(i.due_date, INTERVAL (COALESCE(c.grace_days_override, NULLIF(c.due_grace_days,0), ?) + COALESCE(?,0) + 1) DAY), COALESCE(c.isolation_time_override, ?)) <= NOW()))`,
+      [Number(settings.grace_days ?? 2), Number(settings.isolation_day_offset || 0), settings.isolation_time || '00:01:00']
     );
     for (const customer of paidIsolated) {
       try { results.push({ customerId: customer.id, ...(await setCustomerProfile(customer.id, 'reactivate')) }); }
@@ -99,3 +107,4 @@ export async function processIsolation() {
   }
   return results;
 }
+

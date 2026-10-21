@@ -42,7 +42,15 @@ CREATE TABLE IF NOT EXISTS customers (
   pppoe_username VARCHAR(100) NULL,
   original_ppp_profile VARCHAR(100) NULL,
   billing_day TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  invoice_day_override TINYINT UNSIGNED NULL DEFAULT NULL,
+  payment_start_day_override TINYINT UNSIGNED NULL DEFAULT NULL,
+  payment_end_day_override TINYINT UNSIGNED NULL DEFAULT NULL,
+  grace_days_override INT UNSIGNED NULL DEFAULT NULL,
+  isolation_time_override TIME NULL DEFAULT NULL,
+  collector_id BIGINT UNSIGNED NULL,
   due_grace_days INT UNSIGNED NOT NULL DEFAULT 0,
+  active TINYINT(1) NOT NULL DEFAULT 1,
+  skip_mass_isolation TINYINT(1) NOT NULL DEFAULT 0,
   isolation_enabled TINYINT(1) NOT NULL DEFAULT 1,
   isolation_status ENUM('not_isolated','isolated','pending','error') NOT NULL DEFAULT 'not_isolated',
   customer_status ENUM('active','suspended','terminated') NOT NULL DEFAULT 'active',
@@ -58,8 +66,11 @@ CREATE TABLE IF NOT EXISTS customers (
 CREATE TABLE IF NOT EXISTS billing_settings (
   id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
   invoice_generation_day TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  payment_start_day TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  payment_end_day TINYINT UNSIGNED NOT NULL DEFAULT 13,
+  grace_days INT UNSIGNED NOT NULL DEFAULT 2,
   isolation_day_offset INT UNSIGNED NOT NULL DEFAULT 0,
-  isolation_time TIME NOT NULL DEFAULT '00:05:00',
+  isolation_time TIME NOT NULL DEFAULT '00:01:00',
   auto_reactivate TINYINT(1) NOT NULL DEFAULT 1,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -172,3 +183,5 @@ CREATE TABLE IF NOT EXISTS assets (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+
+ALTER TABLE customers ADD CONSTRAINT fk_customer_collector FOREIGN KEY (collector_id) REFERENCES users(id) ON DELETE SET NULL;

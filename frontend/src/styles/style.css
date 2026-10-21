@@ -69,3 +69,6 @@ td{font-size:13px;padding:15px 16px}
   .compact-stats { grid-template-columns:1fr; }
   .login-panel { padding:20px; }
 }
+
+/* Customer status cards act as quick filters */
+.stat-card-clickable{width:100%;text-align:left;cursor:pointer;font:inherit;transition:border-color .15s,box-shadow .15s}.stat-card-clickable:hover,.stat-card-selected{border-color:#93b4fb;box-shadow:0 0 0 2px #dbeafe}.customer-row-actions{display:flex;gap:5px;align-items:center;flex-wrap:wrap}.danger-btn{border-color:#fecaca;background:#fff1f2;color:#b91c1c}.filter-select{display:inline-flex;flex-direction:column;gap:4px;font-size:11px;color:#7d8799}.filter-select select{border:1px solid #e2e8f0;border-radius:7px;background:#fff;padding:8px;color:#334155;max-width:190px}
