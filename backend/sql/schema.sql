@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   amount DECIMAL(12,2) NOT NULL,
   paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
   status ENUM('unpaid','partial','paid','void') NOT NULL DEFAULT 'unpaid',
+  skip_isolation TINYINT(1) NOT NULL DEFAULT 0,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_invoice_customer FOREIGN KEY (customer_id) REFERENCES customers(id),

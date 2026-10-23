@@ -6,7 +6,8 @@ import { pool } from './db.js';
 import { encryptSecret } from './crypto.js';
 import { logActivity } from './log.js';
 import { testRouter, listPppSecrets, listPppProfiles, listActivePppSessions, setCustomerProfile, getKvIsolirStatus, configureKvIsolirProfile } from './mikrotik.js';
-import { generateMonthlyInvoices, processIsolation, recordPayment } from './billing.js';
+import { generateMonthlyInvoices, recordPayment } from './billing.js';
+import { startScheduler } from './scheduler.js';
 
 const app = express();
 app.use(cors());
@@ -235,6 +236,17 @@ app.put('/api/packages/:id', asyncRoute(async(req,res)=>{
   await logActivity('package_updated','package',Number(req.params.id),{name:b.name});res.json({ok:true});
 }));
 
+app.delete('/api/packages/:id', asyncRoute(async(req,res)=>{
+  const id=Number(req.params.id);
+  const [rows]=await pool.execute('SELECT id,name FROM packages WHERE id=?',[id]);
+  if(!rows.length)return res.status(404).json({error:'Paket tidak ditemukan.'});
+  // FK pada pelanggan dan invoice menggunakan ON DELETE SET NULL, sehingga riwayat tagihan tetap aman.
+  await pool.execute('DELETE FROM packages WHERE id=?',[id]);
+  await logActivity('package_deleted','package',id,{name:rows[0].name});
+  res.json({ok:true});
+}));
+
+
 app.get('/api/bank-accounts', asyncRoute(async (_req,res)=>{ const [rows]=await pool.query('SELECT * FROM bank_accounts ORDER BY is_active DESC, bank_name, account_name'); res.json(rows); }));
 app.post('/api/bank-accounts', asyncRoute(async(req,res)=>{
   const b=req.body;
@@ -251,11 +263,66 @@ app.put('/api/bank-accounts/:id', asyncRoute(async(req,res)=>{
 
 app.get('/api/routers', asyncRoute(async (_req,res)=>{const [rows]=await pool.query('SELECT id,name,host,port,username,isolation_profile,enabled,last_status,last_checked_at FROM routers ORDER BY name');res.json(rows);}));
 app.post('/api/routers', asyncRoute(async(req,res)=>{const b=req.body;if(!b.name||!b.host||!b.username||!b.password)return res.status(400).json({error:'Nama, host, username, dan password router wajib diisi'});const [r]=await pool.execute('INSERT INTO routers (name,host,port,username,password_enc,isolation_profile) VALUES (?,?,?,?,?,?)',[b.name,b.host,Number(b.port||8728),b.username,encryptSecret(b.password),'KV-ISOLIR']);await logActivity('router_created','router',r.insertId,{name:b.name});res.status(201).json({id:r.insertId});}));
+app.put('/api/routers/:id', asyncRoute(async(req,res)=>{
+  const id=Number(req.params.id); const b=req.body;
+  if(!Number.isInteger(id)||id<1)return res.status(400).json({error:'ID router tidak valid.'});
+  if(!String(b.name||'').trim()||!String(b.host||'').trim()||!String(b.username||'').trim())return res.status(400).json({error:'Nama, host, dan username router wajib diisi.'});
+  const port=Number(b.port||8728);if(!Number.isInteger(port)||port<1||port>65535)return res.status(400).json({error:'Port API harus antara 1 sampai 65535.'});
+  const [exists]=await pool.execute('SELECT id,name FROM routers WHERE id=?',[id]);if(!exists.length)return res.status(404).json({error:'Router tidak ditemukan.'});
+  if(String(b.password||'').trim()){
+    await pool.execute('UPDATE routers SET name=?,host=?,port=?,username=?,password_enc=?,isolation_profile=? WHERE id=?',[String(b.name).trim(),String(b.host).trim(),port,String(b.username).trim(),encryptSecret(b.password),'KV-ISOLIR',id]);
+  }else{
+    await pool.execute('UPDATE routers SET name=?,host=?,port=?,username=?,isolation_profile=? WHERE id=?',[String(b.name).trim(),String(b.host).trim(),port,String(b.username).trim(),'KV-ISOLIR',id]);
+  }
+  await logActivity('router_updated','router',id,{name:String(b.name).trim()});res.json({ok:true});
+}));
+app.delete('/api/routers/:id', asyncRoute(async(req,res)=>{
+  const id=Number(req.params.id);if(!Number.isInteger(id)||id<1)return res.status(400).json({error:'ID router tidak valid.'});
+  const [rows]=await pool.execute('SELECT id,name FROM routers WHERE id=?',[id]);if(!rows.length)return res.status(404).json({error:'Router tidak ditemukan.'});
+  const [[customerCount]]=await pool.execute('SELECT COUNT(*) AS total FROM customers WHERE router_id=?',[id]);
+  const [[packageCount]]=await pool.execute('SELECT COUNT(*) AS total FROM packages WHERE router_id=?',[id]);
+  if(Number(customerCount.total)>0||Number(packageCount.total)>0)return res.status(409).json({error:`Router tidak dapat dihapus karena masih digunakan ${customerCount.total} pelanggan dan ${packageCount.total} paket. Pindahkan pelanggan/paket ke router lain terlebih dahulu.`});
+  await pool.execute('DELETE FROM routers WHERE id=?',[id]);await logActivity('router_deleted','router',id,{name:rows[0].name});res.json({ok:true});
+}));
+
 app.post('/api/routers/:id/test', asyncRoute(async(req,res)=>res.json(await testRouter(req.params.id))));
 app.post('/api/routers/:id/use-kv-isolir', asyncRoute(async(req,res)=>res.json(await configureKvIsolirProfile(req.params.id))));
 app.get('/api/routers/:id/ppp-secrets', asyncRoute(async(req,res)=>res.json(await listPppSecrets(req.params.id))));
 
 app.get('/api/invoices', asyncRoute(async(_req,res)=>{const [rows]=await pool.query(`SELECT i.*,c.customer_code,c.name customer_name,c.phone FROM invoices i JOIN customers c ON c.id=i.customer_id ORDER BY i.due_date DESC,i.id DESC LIMIT 1000`);res.json(rows);}));
+
+app.put('/api/invoices/:id/nunggak', asyncRoute(async(req,res)=>{
+  const id=Number(req.params.id); const skip=req.body?.skip===false?0:1;
+  const [rows]=await pool.execute('SELECT id,customer_id,period_start,status FROM invoices WHERE id=?',[id]);
+  if(!rows.length)return res.status(404).json({error:'Tagihan tidak ditemukan.'});
+  await pool.execute('UPDATE invoices SET skip_isolation=? WHERE id=?',[skip,id]);
+  // NUNGGAK berarti melewati isolir untuk periode invoice ini; invoice dan status pembayaran tidak dihapus.
+  if(skip){
+    const [customerRows]=await pool.execute("SELECT isolation_status FROM customers WHERE id=?",[rows[0].customer_id]);
+    if(customerRows[0]?.isolation_status==='isolated'){
+      const { setCustomerProfile }=await import('./mikrotik.js');
+      await setCustomerProfile(rows[0].customer_id,'reactivate');
+    }
+  }
+  await logActivity(skip?'invoice_nunggak_enabled':'invoice_nunggak_disabled','invoice',id,{period_start:rows[0].period_start});
+  res.json({ok:true,skip_isolation:Boolean(skip)});
+}));
+app.delete('/api/invoices/:id', asyncRoute(async(req,res)=>{
+  if(!['superadmin','admin'].includes(req.user?.role))return res.status(403).json({error:'Hanya admin atau superadmin yang dapat menghapus tagihan.'});
+  const id=Number(req.params.id); const conn=await pool.getConnection();
+  try{
+    await conn.beginTransaction();
+    const [rows]=await conn.execute('SELECT id,invoice_number,customer_id FROM invoices WHERE id=? FOR UPDATE',[id]);
+    if(!rows.length){await conn.rollback();return res.status(404).json({error:'Tagihan tidak ditemukan.'});}
+    // Penghapusan tagihan memang menghapus transaksi pembayaran terkait sesuai permintaan operator.
+    await conn.execute('DELETE FROM payments WHERE invoice_id=?',[id]);
+    await conn.execute('DELETE FROM invoices WHERE id=?',[id]);
+    await conn.commit();
+    await logActivity('invoice_deleted','invoice',id,{invoice_number:rows[0].invoice_number,customer_id:rows[0].customer_id,deleted_payments:true});
+    res.json({ok:true});
+  }catch(e){await conn.rollback();throw e;}finally{conn.release();}
+}));
+
 app.get('/api/payments', asyncRoute(async (req, res) => {
   const defaultMonth = new Intl.DateTimeFormat('sv-SE', { timeZone: process.env.APP_TIMEZONE || 'Asia/Jakarta', year: 'numeric', month: '2-digit' }).format(new Date());
   const month = String(req.query.month || defaultMonth);
@@ -277,8 +344,21 @@ app.get('/api/payments', asyncRoute(async (req, res) => {
 }));
 app.post('/api/invoices/generate', asyncRoute(async(req,res)=>{const count=await generateMonthlyInvoices(new Date(),true);res.json({ok:true,created:count});}));
 app.post('/api/payments', asyncRoute(async(req,res)=>{const b=req.body;if(!b.invoice_id||!b.amount||!['cash','transfer'].includes(b.method))return res.status(400).json({error:'Tagihan, nominal, dan metode cash/transfer wajib diisi'});if(b.method==='transfer'&&!b.account_id)return res.status(400).json({error:'Pilih rekening tujuan untuk pembayaran transfer'});res.status(201).json(await recordPayment({invoiceId:b.invoice_id,amount:b.amount,method:b.method,accountId:b.account_id,referenceNumber:b.reference_number,notes:b.notes,createdBy:b.created_by||'admin'}));}));
-app.post('/api/customers/:id/isolate', asyncRoute(async(req,res)=>res.json(await setCustomerProfile(req.params.id,'isolate'))));
-app.post('/api/customers/:id/reactivate', asyncRoute(async(req,res)=>res.json(await setCustomerProfile(req.params.id,'reactivate'))));
+app.post('/api/customers/:id/isolate', asyncRoute(async(req,res)=>{
+  if(!['superadmin','admin'].includes(req.user?.role))return res.status(403).json({error:'Hanya admin atau superadmin yang dapat mengisolir pelanggan.'});
+  const [rows]=await pool.execute('SELECT id,name,active,customer_status,service_type FROM customers WHERE id=?',[req.params.id]);
+  if(!rows.length)return res.status(404).json({error:'Pelanggan tidak ditemukan.'});
+  if(!rows[0].active || rows[0].customer_status!=='active')return res.status(400).json({error:'Pelanggan nonaktif atau ditangguhkan tidak dapat diisolir.'});
+  if(rows[0].service_type==='tv_cable')return res.status(400).json({error:'Pelanggan TV kabel tidak menggunakan MikroTik.'});
+  res.json(await setCustomerProfile(req.params.id,'isolate'));
+}));
+app.post('/api/customers/:id/reactivate', asyncRoute(async(req,res)=>{
+  if(!['superadmin','admin'].includes(req.user?.role))return res.status(403).json({error:'Hanya admin atau superadmin yang dapat mengaktifkan kembali pelanggan.'});
+  const [rows]=await pool.execute('SELECT id,service_type FROM customers WHERE id=?',[req.params.id]);
+  if(!rows.length)return res.status(404).json({error:'Pelanggan tidak ditemukan.'});
+  if(rows[0].service_type==='tv_cable')return res.status(400).json({error:'Pelanggan TV kabel tidak menggunakan MikroTik.'});
+  res.json(await setCustomerProfile(req.params.id,'reactivate'));
+}));
 
 app.get('/api/settings/billing', asyncRoute(async(_req,res)=>{const [rows]=await pool.query('SELECT * FROM billing_settings WHERE id=1');res.json(rows[0]);}));
 app.put('/api/settings/billing', asyncRoute(async(req,res)=>{const b=req.body;const start=Math.min(31,Math.max(1,Number(b.payment_start_day||1)));const end=Math.min(31,Math.max(start,Number(b.payment_end_day||13)));await pool.execute('UPDATE billing_settings SET invoice_generation_day=?,payment_start_day=?,payment_end_day=?,grace_days=?,isolation_day_offset=?,isolation_time=?,auto_reactivate=? WHERE id=1',[Math.min(31,Math.max(1,Number(b.invoice_generation_day||1))),start,end,Math.max(0,Number(b.grace_days??2)),Math.max(0,Number(b.isolation_day_offset||0)),b.isolation_time||'00:01:00',b.auto_reactivate?1:0]);await logActivity('billing_settings_updated','settings',1,b);res.json({ok:true});}));
@@ -286,21 +366,7 @@ app.get('/api/logs', asyncRoute(async(_req,res)=>{const [rows]=await pool.query(
 
 app.use((err,_req,res,_next)=>{console.error(err);res.status(500).json({error:err.message||'Kesalahan server'});});
 const port=Number(process.env.PORT||3000);
-app.listen(port,()=>console.log(`Billing API listening on :${port}`));
-
-if(process.env.SCHEDULER_ENABLED==='true'){
-  process.env.TZ = process.env.APP_TIMEZONE || 'Asia/Jakarta';
-  let busy=false;
-  const tick = async () => {
-    if(busy)return;busy=true;
-    try {
-      const count = await generateMonthlyInvoices(new Date(),false);
-      if (count) console.log(`Generated ${count} invoices`);
-      await processIsolation();
-    } catch(e) { console.error('Billing scheduler error:',e.message); }
-    finally { busy=false; }
-  };
-  setInterval(tick,60_000);
-  setTimeout(tick,5_000);
-  console.log(`Billing scheduler enabled; timezone ${process.env.TZ}; checks every 60 seconds`);
-}
+app.listen(port, () => {
+  console.log(`Billing API listening on :${port}`);
+  startScheduler();
+});

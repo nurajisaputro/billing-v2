@@ -41,7 +41,11 @@ export async function listActivePppSessions(routerId) {
 
 export async function setCustomerProfile(customerId, mode) {
   const [rows] = await pool.execute(
-    `SELECT c.*, r.isolation_profile FROM customers c JOIN routers r ON r.id=c.router_id WHERE c.id=?`, [customerId]
+    `SELECT c.*, r.isolation_profile, p.ppp_profile AS package_ppp_profile
+     FROM customers c
+     JOIN routers r ON r.id=c.router_id
+     LEFT JOIN packages p ON p.id=c.package_id
+     WHERE c.id=?`, [customerId]
   );
   if (!rows.length) throw new Error('Pelanggan atau router belum dikonfigurasi');
   const customer = rows[0];
@@ -63,14 +67,40 @@ export async function setCustomerProfile(customerId, mode) {
 
     let targetProfile;
     if (mode === 'isolate') {
-      if (secret.profile !== router.isolation_profile) {
-        await pool.execute('UPDATE customers SET original_ppp_profile=? WHERE id=? AND (original_ppp_profile IS NULL OR original_ppp_profile=\'\')', [secret.profile, customerId]);
+      // Simpan profil yang benar-benar sedang dipakai sebelum isolir.
+      // Jika Secret sudah KV-ISOLIR tetapi kolom lama masih NULL, gunakan
+      // PPP Profile dari paket pelanggan sebagai fallback.
+      const currentOriginal = String(customer.original_ppp_profile || '').trim();
+      const packageProfile = String(customer.package_ppp_profile || '').trim();
+      if (!currentOriginal) {
+        const profileToSave = secret.profile !== router.isolation_profile
+          ? String(secret.profile || '').trim()
+          : packageProfile;
+        if (profileToSave) {
+          await pool.execute(
+            `UPDATE customers SET original_ppp_profile=?
+             WHERE id=? AND (original_ppp_profile IS NULL OR original_ppp_profile='')`,
+            [profileToSave, customerId]
+          );
+        }
       }
       targetProfile = router.isolation_profile;
     } else {
-      const [saved] = await pool.execute('SELECT original_ppp_profile FROM customers WHERE id=?', [customerId]);
-      targetProfile = saved[0]?.original_ppp_profile;
-      if (!targetProfile) throw new Error('Profil asli belum tersimpan; demi keamanan, profil tidak diubah otomatis');
+      // Utamakan profil asli yang sudah tersimpan. Untuk data lama yang NULL,
+      // ambil dari packages.ppp_profile dan simpan agar berikutnya konsisten.
+      const savedProfile = String(customer.original_ppp_profile || '').trim();
+      const packageProfile = String(customer.package_ppp_profile || '').trim();
+      targetProfile = savedProfile || packageProfile;
+      if (!targetProfile) {
+        throw new Error('Profil asli belum tersimpan dan paket pelanggan tidak memiliki PPP Profile. Periksa paket pelanggan sebelum mengaktifkan kembali.');
+      }
+      if (!savedProfile) {
+        await pool.execute(
+          `UPDATE customers SET original_ppp_profile=?
+           WHERE id=? AND (original_ppp_profile IS NULL OR original_ppp_profile='')`,
+          [targetProfile, customerId]
+        );
+      }
     }
 
     if (secret.profile !== targetProfile) {

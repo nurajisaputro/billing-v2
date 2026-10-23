@@ -79,6 +79,7 @@ export async function processIsolation() {
      JOIN invoices i ON i.customer_id=c.id
      WHERE c.active=1 AND c.customer_status='active' AND c.isolation_enabled=1 AND c.skip_mass_isolation=0
        AND i.status IN ('unpaid','partial')
+       AND NOT EXISTS (SELECT 1 FROM invoices nx WHERE nx.customer_id=c.id AND nx.skip_isolation=1 AND nx.period_start=DATE_FORMAT(CURDATE(), '%Y-%m-01'))
        AND TIMESTAMP(DATE_ADD(i.due_date, INTERVAL (COALESCE(c.grace_days_override, NULLIF(c.due_grace_days,0), ?) + COALESCE(?,0) + 1) DAY), COALESCE(c.isolation_time_override, ?)) <= NOW()`,
     [Number(settings.grace_days ?? 2), Number(settings.isolation_day_offset || 0), settings.isolation_time || '00:01:00']
   );
@@ -86,7 +87,7 @@ export async function processIsolation() {
   const results = [];
   for (const customer of overdue) {
     if (customer.isolation_status === 'isolated') continue;
-    try { results.push({ customerId: customer.id, ...(await setCustomerProfile(customer.id, 'isolate')) }); }
+    try { results.push({ customerId: customer.id, mode: 'isolate', ...(await setCustomerProfile(customer.id, 'isolate')) }); }
     catch (e) {
       await pool.execute("UPDATE customers SET isolation_status='error' WHERE id=?", [customer.id]);
       await logActivity('customer_isolation_failed', 'customer', customer.id, { error: e.message });
@@ -101,7 +102,7 @@ export async function processIsolation() {
       [Number(settings.grace_days ?? 2), Number(settings.isolation_day_offset || 0), settings.isolation_time || '00:01:00']
     );
     for (const customer of paidIsolated) {
-      try { results.push({ customerId: customer.id, ...(await setCustomerProfile(customer.id, 'reactivate')) }); }
+      try { results.push({ customerId: customer.id, mode: 'reactivate', ...(await setCustomerProfile(customer.id, 'reactivate')) }); }
       catch (e) { await logActivity('customer_reactivation_failed', 'customer', customer.id, { error: e.message }); results.push({ customerId: customer.id, ok: false, error: e.message }); }
     }
   }

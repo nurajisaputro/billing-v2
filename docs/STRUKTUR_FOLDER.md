@@ -31,3 +31,11 @@ Dashboard menggunakan endpoint `GET /api/dashboard/isolation-status` yang membac
 ## Riwayat pembayaran
 
 Halaman Pembayaran menggunakan `GET /api/payments?month=YYYY-MM`. Filter bulan berlaku pada tanggal transaksi `paid_at`; riwayat pembayaran lama tetap tersimpan dan dapat dipilih lewat input bulan.
+
+
+## Modul Scheduler (v9)
+
+- `backend/src/scheduler.js`: menjalankan pemeriksaan invoice dan isolir tiap 60 detik, serta pemeriksaan koneksi router tiap 120 detik.
+- `backend/src/billing.js`: aturan generate invoice, isolir massal, aktivasi kembali, dan pencatatan pembayaran.
+- `backend/src/server.js`: API HTTP, validasi role, dan endpoint isolir manual satu pelanggan.
+- `frontend/src/lib/api.js`: helper API yang mendeteksi sesi kedaluwarsa dan mengirim event untuk kembali ke halaman login.
