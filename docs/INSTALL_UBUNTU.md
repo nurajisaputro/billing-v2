@@ -27,7 +27,7 @@ Pilih salah satu:
 # Jika repository sudah tersedia di GitHub
 sudo mkdir -p /opt/billing-rwnet
 sudo chown "$USER":"$USER" /opt/billing-rwnet
- git clone https://github.com/USERNAME/REPOSITORY.git /opt/billing-rwnet
+ git clone https://github.com/nurajisaputro/billing-v2.git /opt/billing-rwnet
 ```
 
 Ganti `USERNAME/REPOSITORY` dengan alamat repository Anda. Jika mengunduh ZIP, unggah lalu ekstrak isi ZIP ke `/opt/billing-rwnet`. Pastikan direktori `backend/` dan `frontend/` ada langsung di dalam folder tersebut.
