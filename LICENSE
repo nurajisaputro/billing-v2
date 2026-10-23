@@ -1,0 +1,112 @@
+LISENSI KHUSUS BILLING RT/RW NET
+LISENSI KODE SUMBER TERSEDIA (SOURCE-AVAILABLE)
+
+Versi 1.0 — Draf
+
+Hak Cipta (c) 2026 NUR AJI SAPUTRO
+
+Seluruh hak dilindungi, kecuali untuk izin terbatas yang secara tegas diberikan dalam lisensi ini.
+
+PEMBERITAHUAN PENTING
+
+Lisensi ini merupakan lisensi khusus dengan kode sumber yang dapat dilihat (source-available), bukan lisensi open-source standar yang disetujui oleh Open Source Initiative (OSI).
+
+Kode sumber dapat dilihat oleh publik, tetapi penggunaan untuk tujuan komersial wajib memperoleh izin tertulis terlebih dahulu dari pemegang hak cipta.
+
+1. DEFINISI
+
+“Perangkat Lunak” adalah aplikasi Billing RT/RW Net, kode sumber asli, dokumentasi, dan materi lain yang secara tegas tercakup dalam lisensi ini.
+
+“Pemegang Hak Cipta” adalah orang atau badan hukum yang tercantum dalam pemberitahuan hak cipta atau pihak lain yang secara sah berwenang memberikan izin atas Perangkat Lunak.
+
+“Penggunaan Komersial” adalah penggunaan yang ditujukan untuk memperoleh keuntungan komersial, imbalan finansial, atau mendukung kegiatan usaha. Penggunaan komersial mencakup, tetapi tidak terbatas pada:
+
+- Menggunakan Perangkat Lunak untuk operasional ISP atau usaha komersial lainnya, termasuk penagihan dan pengelolaan pelanggan.
+- Menjual, menyewakan, melisensikan, atau memberikan sublisensi atas Perangkat Lunak.
+- Menyediakan Perangkat Lunak sebagai layanan berbayar, SaaS, atau layanan terkelola.
+- Memungut biaya instalasi, penerapan, penyesuaian, atau akses terhadap Perangkat Lunak.
+- Mendistribusikan Perangkat Lunak atau versi modifikasinya sebagai bagian dari produk atau layanan berbayar.
+
+2. IZIN PENGGUNAAN NONKOMERSIAL
+
+Dengan tunduk pada ketentuan lisensi ini, Pemegang Hak Cipta memberikan izin terbatas, non-eksklusif, dan berlaku di seluruh dunia kepada pengguna untuk menggunakan, mempelajari, menyalin, serta memodifikasi Perangkat Lunak hanya untuk tujuan nonkomersial yang sah, termasuk pembelajaran pribadi, penelitian, dan evaluasi.
+
+Izin ini tidak memberikan hak untuk menggunakan Perangkat Lunak secara komersial.
+
+3. PENGGUNAAN KOMERSIAL MEMERLUKAN IZIN TERTULIS
+
+Setiap Penggunaan Komersial wajib memperoleh izin tertulis terlebih dahulu dari Pemegang Hak Cipta.
+
+Ketentuan ini berlaku bagi seluruh pengguna komersial, termasuk ISP yang menggunakan Perangkat Lunak untuk operasional usahanya sendiri, meskipun Perangkat Lunak tersebut tidak dijual secara langsung kepada pelanggan.
+
+Pemegang Hak Cipta dapat menetapkan ketentuan lisensi komersial, biaya, dukungan teknis, serta persyaratan lainnya melalui perjanjian tertulis terpisah.
+
+4. MODIFIKASI DAN KODE SUMBER
+
+Pengguna diperbolehkan memodifikasi Perangkat Lunak untuk tujuan nonkomersial yang diizinkan.
+
+Apabila pengguna mendistribusikan atau memberikan versi modifikasi Perangkat Lunak kepada pihak lain, baik dalam bentuk kode sumber maupun berkas yang dapat dijalankan, pengguna wajib:
+
+- Menyertakan kode sumber lengkap yang sesuai untuk bagian Perangkat Lunak yang tercakup dalam lisensi ini beserta modifikasinya.
+- Menyertakan salinan lisensi ini.
+- Mempertahankan pemberitahuan hak cipta dan pemberitahuan lisensi yang berlaku.
+- Menjelaskan perubahan yang dilakukan beserta tanggal perubahan, sepanjang dapat dilakukan secara wajar.
+- Melisensikan bagian Perangkat Lunak yang dimodifikasi dan tercakup dalam lisensi ini berdasarkan ketentuan lisensi yang sama, serta memberitahukan pembatasannya kepada penerima.
+
+Pengguna tidak diperbolehkan mendistribusikan atau memberikan versi modifikasi untuk Penggunaan Komersial tanpa izin tertulis terlebih dahulu dari Pemegang Hak Cipta.
+
+Ketentuan ini tidak mewajibkan pengguna memublikasikan modifikasi pribadi yang tidak didistribusikan atau diberikan kepada pihak lain.
+
+5. PEMBATASAN
+
+Kecuali secara tegas diizinkan dalam lisensi ini atau diperbolehkan oleh hukum yang berlaku, pengguna dilarang:
+
+- Menggunakan Perangkat Lunak secara komersial tanpa izin tertulis terlebih dahulu.
+- Menjual, memberikan sublisensi, atau mendistribusikan Perangkat Lunak secara komersial tanpa izin tertulis terlebih dahulu.
+- Menghapus atau memalsukan pemberitahuan hak cipta, atribusi, atau lisensi.
+- Mengaku sebagai pembuat asli atau pengelola resmi tanpa kewenangan.
+- Menggunakan nama, merek, atau identitas Pemegang Hak Cipta untuk menyiratkan dukungan atau persetujuan tanpa izin.
+
+6. KOMPONEN PIHAK KETIGA
+
+Perangkat Lunak dapat menggunakan atau menyertakan perangkat lunak, pustaka, font, ikon, atau materi pihak ketiga yang diatur oleh lisensi tersendiri.
+
+Komponen tersebut tetap tunduk pada lisensinya masing-masing. Lisensi ini tidak mengesampingkan hak pihak ketiga dan tidak memberikan hak yang tidak dimiliki atau tidak dapat diberikan oleh Pemegang Hak Cipta.
+
+7. HAK CIPTA DAN KEPEMILIKAN
+
+Perangkat Lunak diberikan berdasarkan lisensi, bukan dijual. Pemegang Hak Cipta tetap memiliki hak atas Perangkat Lunak sejauh hak tersebut memang dimilikinya.
+
+Lisensi ini tidak memberikan hak atas merek dagang atau hak kekayaan intelektual lainnya, kecuali secara tegas dinyatakan dalam lisensi ini.
+
+8. PENGAKHIRAN IZIN
+
+Izin berdasarkan lisensi ini berakhir secara otomatis apabila pengguna melakukan pelanggaran material terhadap ketentuannya.
+
+Sepanjang diperbolehkan oleh hukum yang berlaku, izin dapat dipulihkan apabila pelanggaran telah diperbaiki dan Pemegang Hak Cipta mengonfirmasi pemulihan tersebut secara tertulis.
+
+Pengakhiran izin tidak menghapus kewajiban atau tanggung jawab yang telah timbul sebelum pengakhiran.
+
+9. PENAFIAN JAMINAN
+
+SEJAUH DIPERBOLEHKAN OLEH HUKUM YANG BERLAKU, PERANGKAT LUNAK DISEDIAKAN “SEBAGAIMANA ADANYA” DAN “SEBAGAIMANA TERSEDIA”, TANPA JAMINAN DALAM BENTUK APA PUN, BAIK TERSURAT MAUPUN TERSIRAT, TERMASUK JAMINAN KELAYAKAN UNTUK DIPERDAGANGKAN, KESESUAIAN UNTUK TUJUAN TERTENTU, DAN TIDAK ADANYA PELANGGARAN HAK PIHAK LAIN.
+
+Pemegang Hak Cipta tidak menjamin bahwa Perangkat Lunak akan selalu tersedia, aman, bebas dari kesalahan, atau sesuai untuk penggunaan produksi.
+
+10. PEMBATASAN TANGGUNG JAWAB
+
+SEJAUH DIPERBOLEHKAN OLEH HUKUM YANG BERLAKU, PEMEGANG HAK CIPTA TIDAK BERTANGGUNG JAWAB ATAS KERUGIAN TIDAK LANGSUNG, INSIDENTAL, KHUSUS, KONSEKUENSIAL, ATAU KERUGIAN LAIN, TERMASUK KEHILANGAN DATA, PENDAPATAN, KEUNTUNGAN, USAHA, ATAU GANGGUAN LAYANAN YANG TIMBUL DARI PENGGUNAAN ATAU KETIDAKMAMPUAN MENGGUNAKAN PERANGKAT LUNAK.
+
+Tidak ada ketentuan dalam lisensi ini yang mengecualikan atau membatasi tanggung jawab yang menurut hukum tidak dapat dikecualikan atau dibatasi.
+
+11. HUKUM YANG BERLAKU
+
+Lisensi ini tunduk pada hukum yang berlaku. Hukum yang mengatur dan mekanisme penyelesaian sengketa perlu ditetapkan oleh Pemegang Hak Cipta setelah memperoleh nasihat hukum yang sesuai.
+
+12. KETENTUAN PENUTUP
+
+Lisensi ini menjelaskan izin penggunaan Perangkat Lunak dan, sepanjang diperbolehkan oleh hukum, menggantikan pernyataan informal sebelumnya mengenai izin tersebut.
+
+Pengecualian atau izin penggunaan komersial wajib diberikan secara tertulis oleh Pemegang Hak Cipta atau perwakilan yang berwenang.
+
+AKHIR LISENSI
