@@ -93,3 +93,48 @@ The current MVP has no authentication and exposes profile-changing API routes. U
 Di menu MikroTik, buat terlebih dahulu PPP Profile `KV-ISOLIR` pada setiap router. Setelah router tersimpan, klik **Validasi KV-ISOLIR** agar aplikasi memastikan profile tersebut tersedia dan menggunakan nama itu sebagai profile isolir billing. Dashboard akan menghitung pelanggan berdasarkan PPP Secret yang benar-benar memakai profile `KV-ISOLIR` di router; angka tidak dianggap valid bila router gagal diperiksa.
 
 Pada menu Pembayaran, gunakan input bulan untuk melihat riwayat transaksi pada periode lain. Total dan jumlah transaksi mengikuti tanggal pembayaran (`paid_at`), bukan periode tagihan.
+
+
+## Update fitur paket MikroTik (database versi sebelumnya)
+
+Jika database `billing_rwnet` sudah dibuat dari versi project sebelumnya, jalankan file `backend/sql/migrate_package_router.sql` satu kali di MySQL Workbench atau terminal MySQL. Migrasi ini menambahkan hubungan paket dengan router MikroTik. Jangan jalankan ulang jika kolom `packages.router_id` sudah ada. Jika database masih baru, kolom tersebut sudah dibuat oleh `schema.sql` dan migrasi tidak perlu dijalankan.
+
+Paket Internet dan Bundle memerlukan router MikroTik dan PPP Profile yang dibaca langsung melalui RouterOS API. Paket TV Kabel tidak menampilkan pilihan router atau PPP Profile. Status PPP pelanggan diperiksa saat aplikasi dibuka/di-refresh dan otomatis diperiksa kembali setiap 3 jam. Pemeriksaan membaca sesi `/ppp/active`; bila router tidak dapat dihubungi atau pelanggan tidak memiliki sesi aktif, status ditampilkan `Offline`.
+
+
+## Upgrade ke multi-role dan inventaris
+Jika database `billing_rwnet` sudah ada, buka MySQL client lalu jalankan isi file `backend/sql/migrate_multi_role_assets.sql` satu kali. Jangan jalankan migrasi yang sama berulang kali jika Anda mengubahnya secara manual. Jika membuat database baru, gunakan `backend/sql/schema.sql` yang sudah memuat tabel baru.
+
+Restart backend, kemudian buka frontend. Jika tabel `users` masih kosong, aplikasi akan meminta Anda membuat akun superadmin pertama. Gunakan password minimal 8 karakter dan simpan dengan aman. Admin tidak dapat membuka menu MikroTik/Pengaturan; kolektor dibatasi ke menu kerja harian dan laporan bulanan.
+
+
+### Update versi pelanggan: tanggal invoice dan penugasan kolektor
+
+Untuk database yang sudah dipakai dari versi sebelumnya, setelah menjalankan migrasi `migrate_multi_role_assets.sql`, jalankan `backend/sql/migrate_customer_billing_collector.sql` satu kali. Migrasi ini menambahkan override tanggal cetak invoice per pelanggan dan penugasan kolektor. Jangan jalankan jika kolom `invoice_day_override` dan `collector_id` sudah tersedia. Pada database baru, cukup jalankan `schema.sql`.
+
+Tanggal cetak invoice global di Pengaturan menjadi nilai default. Pada form pelanggan, isi `Tanggal cetak invoice` untuk jadwal khusus pelanggan; kosong berarti mengikuti pengaturan global. Scheduler backend harus aktif (`SCHEDULER_ENABLED=true`) agar invoice dibuat otomatis setiap hari sesuai jadwal. `Tanggal billing/jatuh tempo` tetap menentukan tanggal jatuh tempo, dan `Masa tenggang` serta opsi isolir otomatis per pelanggan tetap berlaku.
+
+
+## Pengaturan rentang pembayaran dan isolir massal (v7)
+Untuk database yang sudah dipakai pada v6, setelah memastikan migrasi v6 sebelumnya telah dijalankan, jalankan satu kali `backend/sql/migrate_billing_windows_customer_status.sql` pada database `billing_rwnet`. Untuk database baru, cukup gunakan `backend/sql/schema.sql`.
+
+Default billing: invoice dibuat tanggal 1, masa pembayaran tanggal 1–13, dispensasi 2 hari, lalu isolir massal berjalan tanggal 16 pukul 00:01 (zona waktu server `APP_TIMEZONE`, default Asia/Jakarta). Pengaturan per pelanggan dapat meng-override tanggal invoice, rentang pembayaran, dispensasi, dan jam isolir. Centang **Lewati isolir massal** untuk mengecualikan pelanggan dari proses isolir otomatis. Pelanggan yang dinonaktifkan tidak akan mendapat invoice bulanan baru.
+
+Hapus pelanggan hanya tersedia jika pelanggan belum memiliki riwayat tagihan. Jika sudah ada tagihan, nonaktifkan pelanggan agar riwayat pembayaran tetap terjaga.
+
+
+### Fitur paket dan tagihan versi terbaru
+- Menu Paket memiliki pencarian dan tombol hapus. Penghapusan paket tidak menghapus riwayat invoice; relasi paket pada pelanggan/tagihan menjadi kosong.
+- Menu Tagihan memiliki ringkasan nominal tagihan belum lunas dan lunas yang dapat diklik untuk memfilter daftar, serta pencarian dan filter status.
+- Tombol NUNGGAK menandai invoice periode berjalan agar pelanggan tidak diisolir untuk bulan ini, tanpa menghapus atau membatalkan invoice. Jika pelanggan sudah terisolir, sistem mencoba mengaktifkan kembali PPP profile.
+- Penghapusan invoice menghapus transaksi pembayaran terkait juga; konfirmasi wajib dilakukan karena tidak dapat dibatalkan.
+- Untuk database lama jalankan `backend/sql/migrate_invoice_nunggak.sql` satu kali. Database baru menggunakan `backend/sql/schema.sql`.
+
+
+## Perbaikan v9: Scheduler, session, dan isolir per pelanggan
+
+- Scheduler berada di `backend/src/scheduler.js`; aktifkan dengan `SCHEDULER_ENABLED=true`.
+- Log scheduler muncul pada terminal backend setiap tick. Scheduler memeriksa invoice/isolation setiap 60 detik dan status router setiap 120 detik.
+- Halaman terakhir disimpan di sessionStorage, jadi refresh browser tidak kembali ke Dashboard.
+- Jika API mengembalikan HTTP 401 karena sesi berakhir, token lokal dibersihkan dan aplikasi kembali ke halaman login.
+- Menu Pelanggan memiliki tombol Isolir/Aktifkan per pelanggan (admin/superadmin), yang hanya mengubah PPP profile pelanggan tersebut.
