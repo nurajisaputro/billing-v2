@@ -30,6 +30,11 @@ export async function runBillingSchedulerTick() {
 }
 
 export async function runRouterHealthCheck() {
+  // Avoid opening extra RouterOS API sessions while mass isolation is in progress.
+  if (billingBusy) {
+    console.log('[scheduler] router health check skipped: billing/isolation cycle is running');
+    return;
+  }
   if (routerCheckBusy) return;
   routerCheckBusy = true;
   try {
@@ -55,7 +60,7 @@ export function startScheduler() {
     return;
   }
   if (intervalHandle) return;
-  console.log(`[scheduler] enabled; timezone=${timezone}; billing/isolation interval=60s; router health interval=120s`);
+  console.log(`[scheduler] enabled; timezone=${timezone}; billing/isolation interval=60s; router health interval=120s; isolation batch=${process.env.ISOLATION_BATCH_SIZE || 5}; item delay=${process.env.ISOLATION_ITEM_DELAY_MS || 2000}ms; batch delay=${process.env.ISOLATION_BATCH_DELAY_MS || 5000}ms`);
   // Start immediately after startup, then retry every minute. A single failure is logged and won't stop future ticks.
   setTimeout(() => runBillingSchedulerTick().catch(() => {}), 3_000);
   intervalHandle = setInterval(() => runBillingSchedulerTick().catch(() => {}), 60_000);
