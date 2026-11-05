@@ -125,7 +125,7 @@ export async function processIsolation() {
     const [overdue] = await pool.execute(
       `SELECT DISTINCT c.id, c.isolation_status FROM customers c
        JOIN invoices i ON i.customer_id=c.id
-       WHERE c.active=1 AND c.customer_status='active' AND c.isolation_enabled=1 AND c.skip_mass_isolation=0
+       WHERE c.active=1 AND c.customer_status='active' AND c.isolation_enabled=1 AND c.skip_mass_isolation=0 AND c.router_id IS NOT NULL AND c.pppoe_username IS NOT NULL AND c.pppoe_username<>''
          AND i.status IN ('unpaid','partial')
          AND NOT EXISTS (SELECT 1 FROM invoices nx WHERE nx.customer_id=c.id AND nx.skip_isolation=1 AND nx.period_start=DATE_FORMAT(CURDATE(), '%Y-%m-01'))
          AND TIMESTAMP(DATE_ADD(i.due_date, INTERVAL (COALESCE(c.grace_days_override, NULLIF(c.due_grace_days,0), ?) + COALESCE(?,0) + 1) DAY), COALESCE(c.isolation_time_override, ?)) <= NOW()`,
@@ -139,7 +139,7 @@ export async function processIsolation() {
 
     if (Number(settings.auto_reactivate) === 1) {
       const [paidIsolated] = await pool.execute(
-        `SELECT c.id FROM customers c WHERE c.active=1 AND c.isolation_status='isolated' AND c.customer_status='active'
+        `SELECT c.id FROM customers c WHERE c.active=1 AND c.isolation_status='isolated' AND c.customer_status='active' AND c.router_id IS NOT NULL AND c.pppoe_username IS NOT NULL AND c.pppoe_username<>''
          AND (c.skip_mass_isolation=1 OR c.isolation_enabled=0 OR NOT EXISTS (SELECT 1 FROM invoices i WHERE i.customer_id=c.id AND i.status IN ('unpaid','partial')
            AND TIMESTAMP(DATE_ADD(i.due_date, INTERVAL (COALESCE(c.grace_days_override, NULLIF(c.due_grace_days,0), ?) + COALESCE(?,0) + 1) DAY), COALESCE(c.isolation_time_override, ?)) <= NOW()))`,
         [Number(settings.grace_days ?? 2), Number(settings.isolation_day_offset || 0), settings.isolation_time || '00:01:00']

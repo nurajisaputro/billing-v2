@@ -1,203 +1,4280 @@
-import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, Users, Package, Receipt, CreditCard, Router, Settings, RefreshCw, Search, Plus, Wifi, AlertTriangle, Landmark, Banknote, X, Wallet, Boxes, FileSpreadsheet, UserCog, UserCircle, LogOut, Moon, Sun, Trash2, Power } from 'lucide-react';
-import PaymentHistoryTable from './components/PaymentHistoryTable.jsx';
-import { api } from './lib/api.js';
-import { money } from './utils/format.js';
+import React, { useEffect, useState } from "react";
+import {
+  LayoutDashboard,
+  Users,
+  Package,
+  Receipt,
+  CreditCard,
+  Router,
+  Settings,
+  RefreshCw,
+  Search,
+  Plus,
+  Wifi,
+  AlertTriangle,
+  Landmark,
+  Banknote,
+  X,
+  Wallet,
+  Boxes,
+  FileSpreadsheet,
+  UserCog,
+  UserCircle,
+  LogOut,
+  Moon,
+  Sun,
+  Trash2,
+  Power,
+} from "lucide-react";
+import PaymentHistoryTable from "./components/PaymentHistoryTable.jsx";
+import { api } from "./lib/api.js";
+import { money } from "./utils/format.js";
 
 const nav = [
- ['Dashboard',LayoutDashboard,['superadmin','admin']],
- ['Pelanggan',Users,['superadmin','admin','kolektor']],
- ['Paket',Package,['superadmin','admin']],
- ['Tagihan',Receipt,['superadmin','admin','kolektor']],
- ['Pembayaran',CreditCard,['superadmin','admin','kolektor']],
- ['Laporan Keuangan Bulanan',FileSpreadsheet,['superadmin','admin','kolektor']],
- ['Pengeluaran',Wallet,['superadmin','admin']],
- ['Aset',Boxes,['superadmin','admin']],
- ['Rekening',Landmark,['superadmin','admin']],
- ['MikroTik',Router,['superadmin']],
- ['Pengaturan',Settings,['superadmin']],
- ['Manajemen User',UserCog,['superadmin','admin']],
- ['Profile',UserCircle,['superadmin','admin','kolektor']]
+  ["Dashboard", LayoutDashboard, ["superadmin", "admin"]],
+  ["Pelanggan", Users, ["superadmin", "admin", "kolektor"]],
+  ["Paket", Package, ["superadmin", "admin"]],
+  ["Tagihan", Receipt, ["superadmin", "admin", "kolektor"]],
+  ["Pembayaran", CreditCard, ["superadmin", "admin", "kolektor"]],
+  [
+    "Laporan Keuangan Bulanan",
+    FileSpreadsheet,
+    ["superadmin", "admin", "kolektor"],
+  ],
+  ["Pengeluaran", Wallet, ["superadmin", "admin"]],
+  ["Aset", Boxes, ["superadmin", "admin"]],
+  ["Rekening", Landmark, ["superadmin", "admin"]],
+  ["MikroTik", Router, ["superadmin"]],
+  ["Pengaturan", Settings, ["superadmin"]],
+  ["Manajemen User", UserCog, ["superadmin", "admin"]],
+  ["Profile", UserCircle, ["superadmin", "admin", "kolektor"]],
 ];
-function BillingApp({auth,onLogout}){
- const [page,setPage]=useState(()=>{const saved=sessionStorage.getItem('billing_current_page');const allowed=nav.find(([label,,roles])=>label===saved&&roles.includes(auth.user.role));return allowed?saved:(auth.user.role==='kolektor'?'Pelanggan':'Dashboard')}); const [brand,setBrand]=useState('BillingNet'); const [dark,setDark]=useState(localStorage.getItem('billing_theme')==='dark'); const [isolationStatus,setIsolationStatus]=useState(null); const [isolationLoading,setIsolationLoading]=useState(false); const [paymentMonth,setPaymentMonth]=useState(new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Jakarta'}).slice(0,7)); const [paymentHistory,setPaymentHistory]=useState({rows:[],count:0,total:0,month:''}); const [paymentLoading,setPaymentLoading]=useState(false); const [dash,setDash]=useState(null); const [customers,setCustomers]=useState([]); const [invoices,setInvoices]=useState([]); const [packages,setPackages]=useState([]); const [routers,setRouters]=useState([]); const [bankAccounts,setBankAccounts]=useState([]); const [paymentTarget,setPaymentTarget]=useState(null); const [error,setError]=useState(''); const [loading,setLoading]=useState(false); const [search,setSearch]=useState(''); const [showForm,setShowForm]=useState(false); const [editingCustomer,setEditingCustomer]=useState(null); const [customerServiceFilter,setCustomerServiceFilter]=useState('all'); const [customerStatusFilter,setCustomerStatusFilter]=useState('all'); const [customerStatuses,setCustomerStatuses]=useState({}); const [customerStatusCheckedAt,setCustomerStatusCheckedAt]=useState(null); const [notice,setNotice]=useState(''); const [expenses,setExpenses]=useState([]); const [assets,setAssets]=useState([]); const [users,setUsers]=useState([]); const [selectedCustomers,setSelectedCustomers]=useState([]); const [bulkCollector,setBulkCollector]=useState(''); const [invoiceSearch,setInvoiceSearch]=useState(''); const [invoiceFilter,setInvoiceFilter]=useState('all');
- async function refreshCustomerStatuses(){try{const result=await api('/customers/status');setCustomerStatuses(result.statuses||{});setCustomerStatusCheckedAt(result.checkedAt||new Date().toISOString());}catch(e){setError('Gagal memeriksa status pelanggan: '+e.message)}}
- async function load(){setLoading(true);setError('');try{if(auth.user.role==='kolektor'){
-      const [c,i,a,p,r]=await Promise.all([api('/customers'),api('/invoices'),api('/bank-accounts'),api('/packages'),api('/routers')]);setCustomers(c);setInvoices(i);setBankAccounts(a);setPackages(p);setRouters(r);setDash(null);
-    }else{
-      const [d,c,i,p,r,a]=await Promise.all([api('/dashboard'),api('/customers'),api('/invoices'),api('/packages'),api('/routers'),api('/bank-accounts')]);setDash(d);setCustomers(c);setInvoices(i);setPackages(p);setRouters(r);setBankAccounts(a);
-      const [ex,as,us]=await Promise.all([api('/expenses'),api('/assets'),api('/users')]);setExpenses(ex);setAssets(as);setUsers(us);
-    }}catch(e){setError(e.message+' — pastikan backend dan database sudah aktif.')}finally{setLoading(false)}}
- useEffect(()=>{load();refreshCustomerStatuses();api('/brand').then(v=>setBrand(v.brand_name)).catch(()=>{});const timer=setInterval(refreshCustomerStatuses,3*60*60*1000);return()=>clearInterval(timer)},[]);
- useEffect(()=>{sessionStorage.setItem('billing_current_page',page)},[page]);
- useEffect(()=>{document.title=brand},[brand]);
- async function validateIsolation(){setIsolationLoading(true);try{const result=await api('/dashboard/isolation-status');setIsolationStatus(result)}catch(e){setIsolationStatus({error:e.message})}finally{setIsolationLoading(false)}}
- async function loadPaymentHistory(month=paymentMonth){setPaymentLoading(true);try{setPaymentHistory(await api(`/payments?month=${encodeURIComponent(month)}`))}catch(e){setError(e.message)}finally{setPaymentLoading(false)}}
- useEffect(()=>{if(page==='Dashboard')validateIsolation()},[page]);
- useEffect(()=>{if(page==='Pembayaran')loadPaymentHistory(paymentMonth)},[page,paymentMonth]);
- async function generate(){try{const r=await api('/invoices/generate',{method:'POST'});setNotice(`Berhasil membuat ${r.created} tagihan baru.`);load()}catch(e){setError(e.message)}}
- function payment(invoice){setPaymentTarget(invoice)}
- async function savePayment(data){try{await api('/payments',{method:'POST',body:JSON.stringify(data)});setPaymentTarget(null);setNotice('Pembayaran berhasil dicatat.');load();await loadPaymentHistory(paymentMonth)}catch(e){setError(e.message)}}
- const isOperationalActive=c=>Boolean(c.active)&&c.customer_status==='active'&&c.isolation_status!=='isolated'&&(c.service_type==='tv_cable'||customerStatuses[c.id]?.status==='online');
- const filteredCustomers=customers.filter(c=>`${c.customer_code} ${c.name} ${c.pppoe_username||''} ${c.phone||''}`.toLowerCase().includes(search.toLowerCase())&&(customerServiceFilter==='all'||c.service_type===customerServiceFilter)&&(customerStatusFilter==='all'||(customerStatusFilter==='active'&&isOperationalActive(c))||(customerStatusFilter==='isolated'&&c.isolation_status==='isolated')||(customerStatusFilter==='inactive'&&!Boolean(c.active))));
- async function toggleCustomerIsolation(c){const isolated=c.isolation_status==='isolated';const action=isolated?'reactivate':'isolate';const label=isolated?'mengaktifkan kembali':'mengisolir';if(!window.confirm(`Yakin ${label} pelanggan ${c.name} saja?`))return;try{await api(`/customers/${c.id}/${action}`,{method:'POST'});setNotice(`${c.name} berhasil ${isolated?'diaktifkan kembali':'diisolir'}.`);await load();await refreshCustomerStatuses()}catch(e){setError(e.message)}}
- async function toggleCustomerActive(c){try{await api(`/customers/${c.id}`,{method:'PUT',body:JSON.stringify({...c,active:!Boolean(c.active),skip_mass_isolation:Boolean(c.skip_mass_isolation),isolation_enabled:Boolean(c.isolation_enabled)})});setNotice(`${c.name} ${c.active?'dinonaktifkan':'diaktifkan'}.`);load()}catch(e){setError(e.message)}}
- async function deleteCustomer(c){if(!window.confirm(`Hapus pelanggan ${c.name}? Pelanggan yang memiliki riwayat tagihan tidak dapat dihapus; gunakan Nonaktifkan.`))return;try{await api(`/customers/${c.id}`,{method:'DELETE'});setNotice(`Pelanggan ${c.name} berhasil dihapus.`);load()}catch(e){setError(e.message)}}
- return <div className={"app "+(dark?"theme-dark":"theme-light")}><aside className="sidebar"><div className="brand"><div className="brand-icon"><Wifi size={22}/></div><div><b>{brand}</b><small>ISP Management</small></div></div><div className="nav-label">MENU UTAMA</div>{nav.filter(([label,Icon,roles])=>roles.includes(auth.user.role)).map(([label,Icon])=><button key={label} className={'nav-item '+(page===label?'active':'')} onClick={()=>{setPage(label);setShowForm(false)}}><Icon size={18}/><span>{label}</span></button>)}<div className="sidebar-bottom"><span className="online-dot"/> {auth.user.role.toUpperCase()}</div></aside>
- <main className="main"><header className="topbar"><div><div className="eyebrow">MANAJEMEN LAYANAN</div><h1>{page}</h1></div><div className="top-actions"><button className="icon-btn" onClick={async()=>{await load();await refreshCustomerStatuses()}} title="Refresh data dan status pelanggan"><RefreshCw size={17}/></button><button className="icon-btn" onClick={()=>{const next=!dark;setDark(next);localStorage.setItem('billing_theme',next?'dark':'light')}} title="Ganti tema">{dark?<Sun size={17}/>:<Moon size={17}/>}</button><button className="icon-btn" onClick={()=>setPage('Profile')} title="Profile"><UserCircle size={17}/></button><div className="avatar">{auth.user.name.slice(0,2).toUpperCase()}</div><div className="admin"><b>{auth.user.name}</b><small>{auth.user.role}</small></div><button className="icon-btn" onClick={onLogout} title="Log out"><LogOut size={17}/></button></div></header>
- {error&&<div className="alert error"><AlertTriangle size={18}/>{error}<button onClick={()=>setError('')}>×</button></div>}{notice&&<div className="alert success">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
- {page==='Dashboard'&&<><div className="welcome"><div><h2>Ringkasan Billing</h2><p>Pantau pelanggan, tagihan, dan pembayaran layanan Anda.</p></div><div className="welcome-actions"><button className="secondary" onClick={validateIsolation} disabled={isolationLoading}><RefreshCw size={16}/>{isolationLoading?'Memvalidasi…':'Validasi MikroTik'}</button><button className="primary" onClick={generate}><Plus size={17}/> Generate Tagihan Bulan Ini</button></div></div><div className="stats"><Stat title="Total Pelanggan" value={dash?.customers?.total??'—'} note={`${dash?.customers?.active??0} pelanggan aktif`} icon={Users}/><Stat title="Tagihan Belum Lunas" value={dash?dash.invoices.unpaid_count:'—'} note="Tagihan menunggu pembayaran" icon={Receipt}/><Stat title="Total Tunggakan" value={dash?money(dash.invoices.outstanding):'—'} note="Sisa tagihan belum lunas" icon={CreditCard}/><Stat title="Pembayaran Hari Ini" value={dash?money(dash.payments.today_total):'—'} note="Akumulasi pembayaran masuk" icon={CreditCard}/><Stat title="Terisolir KV-ISOLIR" value={isolationStatus?.count??'—'} note={isolationStatus?.error?'Validasi gagal':isolationStatus?(isolationStatus.totalRouters===0?'Belum ada router terdaftar':`${isolationStatus.checkedRouters.length}/${isolationStatus.totalRouters} router diperiksa`):'Memerlukan validasi router'} icon={Router}/></div>{isolationStatus?.error&&<div className="info-note">Validasi profile KV-ISOLIR gagal: {isolationStatus.error}. Angka terisolir belum dapat dipastikan.</div>}{isolationStatus?.failedRouters?.length>0&&<div className="info-note warning-note">Sebagian router gagal diperiksa: {isolationStatus.failedRouters.map(r=>`${r.name}: ${r.error}`).join('; ')}. Angka yang ditampilkan hanya mencakup router yang berhasil diperiksa.</div>}<div className="content-grid"><section className="panel"><div className="panel-head"><div><h3>Tagihan Terbaru</h3><p>Daftar tagihan pelanggan terbaru</p></div><button className="text-btn" onClick={()=>setPage('Tagihan')}>Lihat semua →</button></div><InvoiceTable rows={invoices.slice(0,6)} onPay={payment}/></section><section className="panel"><div className="panel-head"><div><h3>Status Sistem</h3><p>Koneksi router terdaftar</p></div></div>{routers.length===0?<div className="empty"><Router size={26}/><b>Belum ada router</b><span>Tambahkan MikroTik untuk memulai integrasi.</span><button className="secondary" onClick={()=>setPage('MikroTik')}>Kelola Router</button></div>:routers.map(r=><div className="router-row" key={r.id}><div className="router-icon"><Router size={18}/></div><div className="router-info"><b>{r.name}</b><small>{r.host}:{r.port}</small></div><span className={'status '+r.last_status}>{r.last_status}</span></div>)}<div className="info-note">Profil isolir router harus sama dengan nama profil di RouterOS.</div></section></div></>}
- {page==='Pelanggan'&&<><div className="stats compact-stats customer-stats"><Stat title="Total Pelanggan" value={customers.length} note="Klik untuk melihat semua" icon={Users} onClick={()=>setCustomerStatusFilter('all')} active={customerStatusFilter==='all'}/><Stat title="Pelanggan Aktif" value={customers.filter(isOperationalActive).length} note="Tidak terisolir dan tersambung" icon={Wifi} onClick={()=>setCustomerStatusFilter('active')} active={customerStatusFilter==='active'}/><Stat title="Terisolir" value={customers.filter(c=>c.isolation_status==='isolated').length} note="Profile isolir aktif" icon={AlertTriangle} onClick={()=>setCustomerStatusFilter('isolated')} active={customerStatusFilter==='isolated'}/><Stat title="User Nonaktif" value={customers.filter(c=>!Boolean(c.active)).length} note="Tidak menerima invoice baru" icon={Power} onClick={()=>setCustomerStatusFilter('inactive')} active={customerStatusFilter==='inactive'}/></div><section className="panel"><div className="panel-head"><div><h3>Data Pelanggan</h3><p>{customers.length} pelanggan terdaftar{customerStatusCheckedAt?` · status diperiksa ${new Date(customerStatusCheckedAt).toLocaleString('id-ID')}`:''}</p></div><div className="welcome-actions"><button className="secondary" onClick={()=>exportCsv('pelanggan.csv',[['Kode','Nama','No. HP','Layanan','Paket','Router','PPPoE','Tanggal invoice','Awal pembayaran','Akhir pembayaran','Dispensasi hari','Jam isolir','Kolektor','Aktif','Lewati isolir massal','Status pelanggan','Status isolir'],...filteredCustomers.map(c=>[c.customer_code,c.name,c.phone,c.service_type,c.package_name,c.router_name,c.pppoe_username,c.invoice_day_effective,c.payment_start_day_effective,c.payment_end_day_effective,c.grace_days_effective,c.isolation_time_effective,c.collector_name,c.active?'Aktif':'Nonaktif',c.skip_mass_isolation?'Ya':'Tidak',c.customer_status,c.isolation_status])])}><FileSpreadsheet size={16}/> Export Excel</button><button className="primary" onClick={()=>{setEditingCustomer(null);setShowForm(true)}}><Plus size={17}/> Tambah Pelanggan</button></div></div><div className="toolbar customer-toolbar"><div className="search"><Search size={17}/><input placeholder="Cari nama, kode, PPPoE, nomor HP..." value={search} onChange={e=>setSearch(e.target.value)}/></div><label className="filter-select"><span>Jenis layanan</span><select value={customerServiceFilter} onChange={e=>setCustomerServiceFilter(e.target.value)}><option value="all">Semua layanan</option><option value="internet">Internet</option><option value="tv_cable">TV Kabel</option><option value="bundle">Bundle</option></select></label><label className="filter-select"><span>Status pelanggan</span><select value={customerStatusFilter} onChange={e=>setCustomerStatusFilter(e.target.value)}><option value="all">Semua status</option><option value="active">Aktif / tersambung</option><option value="isolated">Terisolir</option><option value="inactive">User nonaktif</option></select></label><button className="secondary" onClick={refreshCustomerStatuses} disabled={loading}><RefreshCw size={15}/> Cek status</button>{auth.user.role!=='kolektor'&&<><label className="filter-select"><span>Set kolektor untuk {selectedCustomers.length} pelanggan</span><select value={bulkCollector} onChange={e=>setBulkCollector(e.target.value)}><option value="">Pilih kolektor</option><option value="none">Hapus penugasan</option>{users.filter(u=>u.role==='kolektor'&&u.active).map(u=><option key={u.id} value={u.id}>{u.name} ({u.username})</option>)}</select></label><button className="secondary" disabled={!selectedCustomers.length||!bulkCollector} onClick={async()=>{try{const result=await api('/customers/collector/bulk',{method:'PUT',body:JSON.stringify({customer_ids:selectedCustomers,collector_id:bulkCollector==='none'?null:Number(bulkCollector)})});setNotice(`Kolektor diperbarui untuk ${result.updated} pelanggan.`);setSelectedCustomers([]);setBulkCollector('');load()}catch(e){setError(e.message)}}}>Terapkan ke pilihan</button></>}</div><div className="table-wrap"><table><thead><tr>{auth.user.role!=='kolektor'&&<th><input type="checkbox" aria-label="Pilih semua pelanggan" checked={filteredCustomers.length>0&&filteredCustomers.every(c=>selectedCustomers.includes(c.id))} onChange={e=>setSelectedCustomers(e.target.checked?[...new Set([...selectedCustomers,...filteredCustomers.map(c=>c.id)])]:selectedCustomers.filter(id=>!filteredCustomers.some(c=>c.id===id)))}/></th>}<th>Pelanggan</th><th>Layanan / PPPoE</th><th>Paket</th><th>Billing / Tenggang</th><th>Kolektor</th><th>Status user</th><th>Status / IP MikroTik</th><th>Aksi</th></tr></thead><tbody>{filteredCustomers.map(c=>{const live=customerStatuses[c.id];return <tr key={c.id}>{auth.user.role!=='kolektor'&&<td><input type="checkbox" aria-label={`Pilih ${c.name}`} checked={selectedCustomers.includes(c.id)} onChange={e=>setSelectedCustomers(e.target.checked?[...selectedCustomers,c.id]:selectedCustomers.filter(id=>id!==c.id))}/></td>}<td><b>{c.name}</b><small>{c.customer_code} · {c.phone||'Tanpa nomor HP'}</small></td><td>{({internet:'Internet',tv_cable:'TV Kabel',bundle:'Bundle'})[c.service_type]||c.service_type}<small>{c.pppoe_username||'Tidak menggunakan PPPoE'}{c.router_name?` · ${c.router_name}`:''}</small></td><td>{c.package_name||'—'}<small>{money(c.package_price)}</small></td><td>Invoice tgl. {c.invoice_day_effective||c.invoice_day_override||'Global'}<small>Bayar tgl. {c.payment_start_day_effective||c.payment_start_day_override||'Global'}–{c.payment_end_day_effective||c.payment_end_day_override||'Global'} · Dispensasi {c.grace_days_effective??c.grace_days_override??'Global'} hari</small></td><td>{c.collector_name||'Belum ditugaskan'}</td><td><span className={'pill '+(c.active?'green':'red')}>{c.active?'Aktif':'Nonaktif'}</span><small>{c.active?'Menerima invoice':'Invoice baru dihentikan'}</small></td><td><span className={'pill '+(!c.active?'red':c.service_type==='tv_cable'?'yellow':c.isolation_status==='isolated'?'red':live?.status==='online'?'green':'yellow')}>{!c.active?'Nonaktif':c.service_type==='tv_cable'?'Tidak pakai MikroTik':c.isolation_status==='isolated'?'Terisolir':live?.status==='online'?'Online':'Offline'}</span><small>IP: {c.service_type==='tv_cable'?'—':live?.status==='online'&&live.ip?live.ip:'Offline'}</small></td><td><div className="customer-row-actions">{auth.user.role!=='kolektor'&&c.service_type!=='tv_cable'&&Boolean(c.active)&&c.customer_status==='active'&&<button className={'small-btn '+(c.isolation_status==='isolated'?'':'danger-btn')} onClick={()=>toggleCustomerIsolation(c)} title={c.isolation_status==='isolated'?'Aktifkan kembali pelanggan ini':'Isolir pelanggan ini saja'}>{c.isolation_status==='isolated'?'Aktifkan':'Isolir'}</button>}<button className="small-btn" onClick={()=>{setEditingCustomer(c);setShowForm(true)}}>Edit</button>{auth.user.role!=='kolektor'&&<><button className="small-btn" onClick={()=>toggleCustomerActive(c)} title={c.active?'Nonaktifkan pelanggan':'Aktifkan pelanggan'}><Power size={13}/>{c.active?'Nonaktifkan':'Aktifkan'}</button><button className="small-btn danger-btn" onClick={()=>deleteCustomer(c)} title="Hapus pelanggan"><Trash2 size={13}/> Hapus</button></>}</div></td></tr>})}{filteredCustomers.length===0&&<tr><td colSpan={auth.user.role==='kolektor'?8:9} className="empty-cell">Belum ada data pelanggan yang cocok.</td></tr>}</tbody></table></div></section></>}
- {page==='Tagihan'&&<><div className="stats compact-stats invoice-stats"><Stat title="Total Tagihan Belum Lunas" value={money(invoices.filter(i=>['unpaid','partial'].includes(i.status)).reduce((n,i)=>n+Number(i.amount-i.paid_amount),0))} note={`${invoices.filter(i=>['unpaid','partial'].includes(i.status)).length} tagihan · klik untuk filter`} icon={Receipt} onClick={()=>setInvoiceFilter('unpaid')} active={invoiceFilter==='unpaid'}/><Stat title="Total Tagihan Lunas" value={money(invoices.filter(i=>i.status==='paid').reduce((n,i)=>n+Number(i.amount),0))} note={`${invoices.filter(i=>i.status==='paid').length} tagihan · klik untuk filter`} icon={CreditCard} onClick={()=>setInvoiceFilter('paid')} active={invoiceFilter==='paid'}/><Stat title="Semua Tagihan" value={invoices.length} note="Klik untuk menampilkan semua" icon={FileSpreadsheet} onClick={()=>setInvoiceFilter('all')} active={invoiceFilter==='all'}/></div><section className="panel"><div className="panel-head"><div><h3>Tagihan Pelanggan</h3><p>Tagihan bulanan, status pelunasan, dan pengecualian isolir bulan ini</p></div><button className="primary" onClick={generate}><Plus size={17}/> Generate Tagihan</button></div><div className="toolbar"><div className="search"><Search size={17}/><input placeholder="Cari nomor tagihan, nama atau kode pelanggan..." value={invoiceSearch} onChange={e=>setInvoiceSearch(e.target.value)}/></div><label className="filter-select"><span>Status tagihan</span><select value={invoiceFilter} onChange={e=>setInvoiceFilter(e.target.value)}><option value="all">Semua status</option><option value="unpaid">Belum lunas / sebagian</option><option value="paid">Lunas</option><option value="void">Batal</option></select></label></div><InvoiceTable rows={invoices.filter(i=>(invoiceFilter==='all'||(invoiceFilter==='unpaid'?['unpaid','partial'].includes(i.status):i.status===invoiceFilter))&&`${i.invoice_number} ${i.customer_name} ${i.customer_code}`.toLowerCase().includes(invoiceSearch.toLowerCase()))} onPay={payment} onDelete={async invoice=>{if(!window.confirm(`Hapus tagihan ${invoice.invoice_number}? Pembayaran yang terkait juga akan dihapus. Tindakan ini tidak dapat dibatalkan.`))return;try{await api(`/invoices/${invoice.id}`,{method:'DELETE'});setNotice(`Tagihan ${invoice.invoice_number} dihapus.`);load();if(page==='Pembayaran')loadPaymentHistory(paymentMonth)}catch(e){setError(e.message)}}} onNunggak={async invoice=>{try{const skip=!Boolean(invoice.skip_isolation);await api(`/invoices/${invoice.id}/nunggak`,{method:'PUT',body:JSON.stringify({skip})});setNotice(skip?`NUNGGAK diaktifkan untuk ${invoice.invoice_number}; isolir bulan ini dilewati.`:`Pengecualian NUNGGAK dihapus untuk ${invoice.invoice_number}.`);load()}catch(e){setError(e.message)}}}/></section></>}
- {page==='Paket'&&<PackagePage packages={packages} routers={routers} onSaved={()=>{load();setNotice('Paket berhasil disimpan.')}} onError={setError}/>}
- {page==='Pembayaran'&&<><section className="panel"><div className="panel-head payment-filter-head"><div><h3>Riwayat Pembayaran</h3><p>Filter pembayaran berdasarkan bulan, termasuk bulan-bulan sebelumnya.</p></div><label className="month-filter"><span>Bulan pembayaran</span><input type="month" value={paymentMonth} onChange={e=>setPaymentMonth(e.target.value)}/></label></div><div className="payment-summary"><div><span>Total pembayaran bulan ini</span><strong>{money(paymentHistory.total)}</strong></div><div><span>Jumlah transaksi</span><strong>{paymentHistory.count}</strong></div><div><span>Periode</span><strong>{paymentMonth}</strong></div></div>{paymentLoading?<div className="empty">Memuat riwayat pembayaran…</div>:<PaymentHistoryTable rows={paymentHistory.rows} money={money}/>}</section><section className="panel"><div className="panel-head"><div><h3>Tagihan Belum Lunas</h3><p>Pilih tagihan untuk mencatat pembayaran cash atau transfer.</p></div></div><InvoiceTable rows={invoices.filter(i=>['unpaid','partial'].includes(i.status))} onPay={payment}/></section></>}
- {page==='Rekening'&&<BankAccountsPage accounts={bankAccounts} onSaved={()=>{load();setNotice('Data rekening berhasil disimpan.')}} onError={setError}/>}
- {page==='MikroTik'&&<RouterPage routers={routers} onSaved={()=>{load();setNotice('Router berhasil ditambahkan.')}} onError={setError}/>}
- 
- {page==='Laporan Keuangan Bulanan'&&<MonthlyReportPage onError={setError}/>}
- {page==='Pengeluaran'&&<ExpensesPage rows={expenses} onSaved={async()=>{setExpenses(await api('/expenses'));setNotice('Pengeluaran tersimpan.')}} onError={setError}/>}
- {page==='Aset'&&<AssetsPage rows={assets} onSaved={async()=>{setAssets(await api('/assets'));setNotice('Aset tersimpan.')}} onError={setError}/>}
- {page==='Manajemen User'&&<UsersPage rows={users} currentUser={auth.user} onSaved={async()=>{setUsers(await api('/users'));setNotice('Data user diperbarui.')}} onError={setError}/>}
- {page==='Profile'&&<ProfilePage user={auth.user} onSaved={async()=>{const p=await api('/profile');auth.setUser(p);setNotice('Profile berhasil diperbarui.')}} onError={setError}/>}
- {page==='Pengaturan'&&<BrandSettings brand={brand} onSaved={async()=>{const v=await api('/brand');setBrand(v.brand_name);setNotice('Nama brand berhasil diperbarui.')}} onError={setError}/>}
- {page==='Pengaturan'&&<SettingsPage onSaved={()=>setNotice('Pengaturan billing disimpan.')} onError={setError}/>}
- {showForm&&page==='Pelanggan'&&<CustomerForm key={editingCustomer?.id||'new-customer'} customer={editingCustomer} packages={packages} routers={routers} users={users} canAssignCollector={auth.user.role!=='kolektor'} globalInvoiceDay={1} onCancel={()=>{setShowForm(false);setEditingCustomer(null)}} onSaved={()=>{setShowForm(false);setEditingCustomer(null);load();refreshCustomerStatuses();setNotice(editingCustomer?'Data pelanggan berhasil diperbarui.':'Pelanggan berhasil ditambahkan.')}} onError={setError}/>}{paymentTarget&&<PaymentModal invoice={paymentTarget} accounts={bankAccounts.filter(a=>a.is_active)} onClose={()=>setPaymentTarget(null)} onSubmit={savePayment}/>}
- <footer>BillingNet MVP <span>·</span> Zona waktu Asia/Jakarta <span>·</span> {loading?'Memuat data…':'Terhubung ke API jika tidak ada pesan error'}</footer></main></div>
+function BillingApp({ auth, onLogout }) {
+  const [page, setPage] = useState(() => {
+    const saved = sessionStorage.getItem("billing_current_page");
+    const allowed = nav.find(
+      ([label, , roles]) => label === saved && roles.includes(auth.user.role),
+    );
+    return allowed
+      ? saved
+      : auth.user.role === "kolektor"
+        ? "Pelanggan"
+        : "Dashboard";
+  });
+  const [brand, setBrand] = useState("BillingNet");
+  const [dark, setDark] = useState(
+    localStorage.getItem("billing_theme") === "dark",
+  );
+  const [isolationStatus, setIsolationStatus] = useState(null);
+  const [isolationLoading, setIsolationLoading] = useState(false);
+  const [paymentMonth, setPaymentMonth] = useState(
+    new Date()
+      .toLocaleDateString("sv-SE", { timeZone: "Asia/Jakarta" })
+      .slice(0, 7),
+  );
+  const [paymentHistory, setPaymentHistory] = useState({
+    rows: [],
+    count: 0,
+    total: 0,
+    month: "",
+  });
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [dash, setDash] = useState(null);
+  const [customers, setCustomers] = useState([]);
+  const [invoices, setInvoices] = useState([]);
+  const [packages, setPackages] = useState([]);
+  const [routers, setRouters] = useState([]);
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [paymentTarget, setPaymentTarget] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState(null);
+  const [customerServiceFilter, setCustomerServiceFilter] = useState("all");
+  const [customerStatusFilter, setCustomerStatusFilter] = useState("all");
+  const [customerStatuses, setCustomerStatuses] = useState({});
+  const [customerStatusCheckedAt, setCustomerStatusCheckedAt] = useState(null);
+  const [notice, setNotice] = useState("");
+  const [expenses, setExpenses] = useState([]);
+  const [assets, setAssets] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [selectedCustomers, setSelectedCustomers] = useState([]);
+  const [bulkCollector, setBulkCollector] = useState("");
+  const [invoiceSearch, setInvoiceSearch] = useState("");
+  const [invoiceFilter, setInvoiceFilter] = useState("all");
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [detailCustomer, setDetailCustomer] = useState(null);
+  const [customerDetail, setCustomerDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [importingCustomers, setImportingCustomers] = useState(false);
+  async function refreshCustomerStatuses() {
+    try {
+      const result = await api("/customers/status");
+      setCustomerStatuses(result.statuses || {});
+      setCustomerStatusCheckedAt(result.checkedAt || new Date().toISOString());
+    } catch (e) {
+      setError("Gagal memeriksa status pelanggan: " + e.message);
+    }
+  }
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      if (auth.user.role === "kolektor") {
+        const [c, i, a, p, r] = await Promise.all([
+          api("/customers"),
+          api("/invoices"),
+          api("/bank-accounts"),
+          api("/packages"),
+          api("/routers"),
+        ]);
+        setCustomers(c);
+        setInvoices(i);
+        setBankAccounts(a);
+        setPackages(p);
+        setRouters(r);
+        setDash(null);
+      } else {
+        const [d, c, i, p, r, a] = await Promise.all([
+          api("/dashboard"),
+          api("/customers"),
+          api("/invoices"),
+          api("/packages"),
+          api("/routers"),
+          api("/bank-accounts"),
+        ]);
+        setDash(d);
+        setCustomers(c);
+        setInvoices(i);
+        setPackages(p);
+        setRouters(r);
+        setBankAccounts(a);
+        const [ex, as, us] = await Promise.all([
+          api("/expenses"),
+          api("/assets"),
+          api("/users"),
+        ]);
+        setExpenses(ex);
+        setAssets(as);
+        setUsers(us);
+      }
+    } catch (e) {
+      setError(e.message + " — pastikan backend dan database sudah aktif.");
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => {
+    load();
+    refreshCustomerStatuses();
+    api("/brand")
+      .then((v) => setBrand(v.brand_name))
+      .catch(() => {});
+    const timer = setInterval(refreshCustomerStatuses, 3 * 60 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    sessionStorage.setItem("billing_current_page", page);
+  }, [page]);
+  useEffect(() => {
+    document.title = brand;
+  }, [brand]);
+  async function validateIsolation() {
+    setIsolationLoading(true);
+    try {
+      const result = await api("/dashboard/isolation-status");
+      setIsolationStatus(result);
+    } catch (e) {
+      setIsolationStatus({ error: e.message });
+    } finally {
+      setIsolationLoading(false);
+    }
+  }
+  async function loadPaymentHistory(month = paymentMonth) {
+    setPaymentLoading(true);
+    try {
+      setPaymentHistory(
+        await api(`/payments?month=${encodeURIComponent(month)}`),
+      );
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setPaymentLoading(false);
+    }
+  }
+  useEffect(() => {
+    if (page === "Dashboard") validateIsolation();
+  }, [page]);
+  useEffect(() => {
+    if (page === "Pembayaran") loadPaymentHistory(paymentMonth);
+  }, [page, paymentMonth]);
+  async function generate() {
+    try {
+      const r = await api("/invoices/generate", { method: "POST" });
+      setNotice(`Berhasil membuat ${r.created} tagihan baru.`);
+      load();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+  function payment(invoice) {
+    setPaymentTarget(invoice);
+  }
+  async function savePayment(data) {
+    try {
+      await api("/payments", { method: "POST", body: JSON.stringify(data) });
+      setPaymentTarget(null);
+      setNotice("Pembayaran berhasil dicatat.");
+      load();
+      await loadPaymentHistory(paymentMonth);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+  const isOperationalActive = (c) =>
+    Boolean(c.active) &&
+    c.customer_status === "active" &&
+    c.isolation_status !== "isolated" &&
+    (c.service_type === "tv_cable" ||
+      customerStatuses[c.id]?.status === "online");
+  const filteredCustomers = customers.filter(
+    (c) =>
+      `${c.customer_code} ${c.name} ${c.pppoe_username || ""} ${c.phone || ""}`
+        .toLowerCase()
+        .includes(search.toLowerCase()) &&
+      (customerServiceFilter === "all" ||
+        c.service_type === customerServiceFilter) &&
+      (customerStatusFilter === "all" ||
+        (customerStatusFilter === "active" && isOperationalActive(c)) ||
+        (customerStatusFilter === "isolated" &&
+          c.isolation_status === "isolated") ||
+        (customerStatusFilter === "inactive" && !Boolean(c.active))),
+  );
+  async function toggleCustomerIsolation(c) {
+    const isolated = c.isolation_status === "isolated";
+    const action = isolated ? "reactivate" : "isolate";
+    const label = isolated ? "mengaktifkan kembali" : "mengisolir";
+    if (!window.confirm(`Yakin ${label} pelanggan ${c.name} saja?`)) return;
+    try {
+      await api(`/customers/${c.id}/${action}`, { method: "POST" });
+      setNotice(
+        `${c.name} berhasil ${isolated ? "diaktifkan kembali" : "diisolir"}.`,
+      );
+      await load();
+      await refreshCustomerStatuses();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+  async function toggleCustomerActive(c) {
+    try {
+      await api(`/customers/${c.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          ...c,
+          active: !Boolean(c.active),
+          skip_mass_isolation: Boolean(c.skip_mass_isolation),
+          isolation_enabled: Boolean(c.isolation_enabled),
+        }),
+      });
+      setNotice(`${c.name} ${c.active ? "dinonaktifkan" : "diaktifkan"}.`);
+      load();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+  async function deleteCustomer(c) {
+    if (
+      !window.confirm(
+        `Hapus pelanggan ${c.name}? Pelanggan yang memiliki riwayat tagihan tidak dapat dihapus; gunakan Nonaktifkan.`,
+      )
+    )
+      return;
+    try {
+      await api(`/customers/${c.id}`, { method: "DELETE" });
+      setNotice(`Pelanggan ${c.name} berhasil dihapus.`);
+      load();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+  async function openCustomerDetail(c) {
+    setGlobalSearch("");
+    setDetailCustomer(c);
+    setCustomerDetail(null);
+    setDetailLoading(true);
+    setPage("Detail Pelanggan");
+    try {
+      setCustomerDetail(await api(`/customers/${c.id}/details`));
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+  async function importCustomerFile(file) {
+    if (!file) return;
+    setImportingCustomers(true);
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (rows.length < 2)
+        throw new Error("File CSV kosong atau tidak memiliki baris data.");
+      const headers = rows[0].map((x) => x.trim().toLowerCase());
+      const pick = (row, names) => {
+        const i = headers.findIndex((h) => names.includes(h));
+        return i < 0 ? "" : String(row[i] || "").trim();
+      };
+      const data = rows
+        .slice(1)
+        .filter((r) => r.some((v) => String(v || "").trim()))
+        .map((r) => ({
+          name: pick(r, ["nama", "nama pelanggan", "name"]),
+          address: pick(r, ["alamat", "address"]),
+          phone: pick(r, ["no hp", "nomor hp", "hp", "phone"]),
+          package_name: pick(r, [
+            "paket internet",
+            "paket",
+            "nama paket",
+            "package",
+          ]),
+          service_type: normalizeService(
+            pick(r, ["layanan", "jenis layanan", "service_type", "service"]),
+          ),
+        }));
+      const result = await api("/customers/import", {
+        method: "POST",
+        body: JSON.stringify({ rows: data }),
+      });
+      setNotice(
+        `Import selesai: ${result.imported} pelanggan berhasil ditambahkan${result.skipped ? `, ${result.skipped} dilewati` : ""}.`,
+      );
+      const importErrors = result.errors || [];
+      await load();
+      if (importErrors.length) setError(importErrors.slice(0, 5).join(" | "));
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setImportingCustomers(false);
+    }
+  }
+  const globalMatches = globalSearch.trim()
+    ? customers
+        .filter(
+          (c) =>
+            `${c.customer_code} ${c.name} ${c.pppoe_username || ""} ${c.phone || ""}`
+              .toLowerCase()
+              .includes(globalSearch.toLowerCase()) ||
+            invoices.some(
+              (i) =>
+                i.customer_id === c.id &&
+                ["unpaid", "partial"].includes(i.status) &&
+                String(i.invoice_number || "")
+                  .toLowerCase()
+                  .includes(globalSearch.toLowerCase()),
+            ),
+        )
+        .slice(0, 8)
+    : [];
+  return (
+    <div className={"app " + (dark ? "theme-dark" : "theme-light")}>
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="brand-icon">
+            <Wifi size={22} />
+          </div>
+          <div>
+            <b>{brand}</b>
+            <small>ISP Management</small>
+          </div>
+        </div>
+        <div className="nav-label">MENU UTAMA</div>
+        {nav
+          .filter(([label, Icon, roles]) => roles.includes(auth.user.role))
+          .map(([label, Icon]) => (
+            <button
+              key={label}
+              className={"nav-item " + (page === label ? "active" : "")}
+              onClick={() => {
+                setPage(label);
+                setShowForm(false);
+              }}
+            >
+              <Icon size={18} />
+              <span>{label}</span>
+            </button>
+          ))}
+        <div className="sidebar-bottom">
+          <span className="online-dot" /> {auth.user.role.toUpperCase()}
+        </div>
+      </aside>
+      <main className="main">
+        <header className="topbar">
+          <div>
+            <div className="eyebrow">MANAJEMEN LAYANAN</div>
+            <h1>{page}</h1>
+          </div>
+          <div className="top-actions">
+            <div className="global-search-wrap">
+              <div className="global-search">
+                <Search size={16} />
+                <input
+                  value={globalSearch}
+                  onChange={(e) => setGlobalSearch(e.target.value)}
+                  placeholder="Cari pelanggan / invoice aktif…"
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setGlobalSearch("");
+                  }}
+                />
+              </div>
+              {globalSearch.trim() &&
+                !showForm &&
+                !paymentTarget &&
+                page !== "Detail Pelanggan" && (
+                  <div className="global-search-results">
+                    {globalMatches.length ? (
+                      globalMatches.map((c) => {
+                        const openInvoices = invoices.filter(
+                          (i) =>
+                            i.customer_id === c.id &&
+                            ["unpaid", "partial"].includes(i.status),
+                        );
+                        return (
+                          <button
+                            key={c.id}
+                            onClick={() => {
+                              setGlobalSearch("");
+                              openCustomerDetail(c);
+                            }}
+                          >
+                            <b>{c.name}</b>
+                            <small>
+                              {c.customer_code} · {c.phone || "Tanpa HP"}
+                            </small>
+                            <small>
+                              {openInvoices.length} invoice aktif
+                              {openInvoices.length
+                                ? ` · ${money(openInvoices.reduce((n, i) => n + Number(i.amount - i.paid_amount), 0))}`
+                                : ""}
+                            </small>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="global-search-empty">
+                        Pelanggan tidak ditemukan.
+                      </div>
+                    )}
+                  </div>
+                )}
+            </div>
+            <button
+              className="icon-btn"
+              onClick={async () => {
+                await load();
+                await refreshCustomerStatuses();
+              }}
+              title="Refresh data dan status pelanggan"
+            >
+              <RefreshCw size={17} />
+            </button>
+            <button
+              className="icon-btn"
+              onClick={() => {
+                const next = !dark;
+                setDark(next);
+                localStorage.setItem("billing_theme", next ? "dark" : "light");
+              }}
+              title="Ganti tema"
+            >
+              {dark ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
+            <button
+              className="icon-btn"
+              onClick={() => setPage("Profile")}
+              title="Profile"
+            >
+              <UserCircle size={17} />
+            </button>
+            <div className="avatar">
+              {auth.user.name.slice(0, 2).toUpperCase()}
+            </div>
+            <div className="admin">
+              <b>{auth.user.name}</b>
+              <small>{auth.user.role}</small>
+            </div>
+            <button className="icon-btn" onClick={onLogout} title="Log out">
+              <LogOut size={17} />
+            </button>
+          </div>
+        </header>
+        {error && (
+          <div className="alert error">
+            <AlertTriangle size={18} />
+            {error}
+            <button onClick={() => setError("")}>×</button>
+          </div>
+        )}
+        {notice && (
+          <div className="alert success">
+            {notice}
+            <button onClick={() => setNotice("")}>×</button>
+          </div>
+        )}
+        {page === "Dashboard" && (
+          <>
+            <div className="welcome">
+              <div>
+                <h2>Ringkasan Billing</h2>
+                <p>Pantau pelanggan, tagihan, dan pembayaran layanan Anda.</p>
+              </div>
+              <div className="welcome-actions">
+                <button
+                  className="secondary"
+                  onClick={validateIsolation}
+                  disabled={isolationLoading}
+                >
+                  <RefreshCw size={16} />
+                  {isolationLoading ? "Memvalidasi…" : "Validasi MikroTik"}
+                </button>
+                <button className="primary" onClick={generate}>
+                  <Plus size={17} /> Generate Tagihan Bulan Ini
+                </button>
+              </div>
+            </div>
+            <div className="stats">
+              <Stat
+                title="Total Pelanggan"
+                value={dash?.customers?.total ?? "—"}
+                note={`${dash?.customers?.active ?? 0} pelanggan aktif`}
+                icon={Users}
+              />
+              <Stat
+                title="Tagihan Belum Lunas"
+                value={dash ? dash.invoices.unpaid_count : "—"}
+                note="Tagihan menunggu pembayaran"
+                icon={Receipt}
+              />
+              <Stat
+                title="Total Tunggakan"
+                value={dash ? money(dash.invoices.outstanding) : "—"}
+                note="Sisa tagihan belum lunas"
+                icon={CreditCard}
+              />
+              <Stat
+                title="Pembayaran Hari Ini"
+                value={dash ? money(dash.payments.today_total) : "—"}
+                note="Akumulasi pembayaran masuk"
+                icon={CreditCard}
+              />
+              <Stat
+                title="Terisolir KV-ISOLIR"
+                value={isolationStatus?.count ?? "—"}
+                note={
+                  isolationStatus?.error
+                    ? "Validasi gagal"
+                    : isolationStatus
+                      ? isolationStatus.totalRouters === 0
+                        ? "Belum ada router terdaftar"
+                        : `${isolationStatus.checkedRouters.length}/${isolationStatus.totalRouters} router diperiksa`
+                      : "Memerlukan validasi router"
+                }
+                icon={Router}
+              />
+            </div>
+            {isolationStatus?.error && (
+              <div className="info-note">
+                Validasi profile KV-ISOLIR gagal: {isolationStatus.error}. Angka
+                terisolir belum dapat dipastikan.
+              </div>
+            )}
+            {isolationStatus?.failedRouters?.length > 0 && (
+              <div className="info-note warning-note">
+                Sebagian router gagal diperiksa:{" "}
+                {isolationStatus.failedRouters
+                  .map((r) => `${r.name}: ${r.error}`)
+                  .join("; ")}
+                . Angka yang ditampilkan hanya mencakup router yang berhasil
+                diperiksa.
+              </div>
+            )}
+            <div className="content-grid">
+              <section className="panel">
+                <div className="panel-head">
+                  <div>
+                    <h3>Tagihan Terbaru</h3>
+                    <p>Daftar tagihan pelanggan terbaru</p>
+                  </div>
+                  <button
+                    className="text-btn"
+                    onClick={() => setPage("Tagihan")}
+                  >
+                    Lihat semua →
+                  </button>
+                </div>
+                <InvoiceTable rows={invoices.slice(0, 6)} onPay={payment} />
+              </section>
+              <section className="panel">
+                <div className="panel-head">
+                  <div>
+                    <h3>Status Sistem</h3>
+                    <p>Koneksi router terdaftar</p>
+                  </div>
+                </div>
+                {routers.length === 0 ? (
+                  <div className="empty">
+                    <Router size={26} />
+                    <b>Belum ada router</b>
+                    <span>Tambahkan MikroTik untuk memulai integrasi.</span>
+                    <button
+                      className="secondary"
+                      onClick={() => setPage("MikroTik")}
+                    >
+                      Kelola Router
+                    </button>
+                  </div>
+                ) : (
+                  routers.map((r) => (
+                    <div className="router-row" key={r.id}>
+                      <div className="router-icon">
+                        <Router size={18} />
+                      </div>
+                      <div className="router-info">
+                        <b>{r.name}</b>
+                        <small>
+                          {r.host}:{r.port}
+                        </small>
+                      </div>
+                      <span className={"status " + r.last_status}>
+                        {r.last_status}
+                      </span>
+                    </div>
+                  ))
+                )}
+                <div className="info-note">
+                  Profil isolir router harus sama dengan nama profil di
+                  RouterOS.
+                </div>
+              </section>
+            </div>
+          </>
+        )}
+        {page === "Pelanggan" && (
+          <>
+            <div className="stats compact-stats customer-stats">
+              <Stat
+                title="Total Pelanggan"
+                value={customers.length}
+                note="Klik untuk melihat semua"
+                icon={Users}
+                onClick={() => setCustomerStatusFilter("all")}
+                active={customerStatusFilter === "all"}
+              />
+              <Stat
+                title="Pelanggan Aktif"
+                value={customers.filter(isOperationalActive).length}
+                note="Tidak terisolir dan tersambung"
+                icon={Wifi}
+                onClick={() => setCustomerStatusFilter("active")}
+                active={customerStatusFilter === "active"}
+              />
+              <Stat
+                title="Terisolir"
+                value={
+                  customers.filter((c) => c.isolation_status === "isolated")
+                    .length
+                }
+                note="Profile isolir aktif"
+                icon={AlertTriangle}
+                onClick={() => setCustomerStatusFilter("isolated")}
+                active={customerStatusFilter === "isolated"}
+              />
+              <Stat
+                title="User Nonaktif"
+                value={customers.filter((c) => !Boolean(c.active)).length}
+                note="Tidak menerima invoice baru"
+                icon={Power}
+                onClick={() => setCustomerStatusFilter("inactive")}
+                active={customerStatusFilter === "inactive"}
+              />
+            </div>
+            <section className="panel">
+              <div className="panel-head">
+                <div>
+                  <h3>Data Pelanggan</h3>
+                  <p>
+                    {customers.length} pelanggan terdaftar
+                    {customerStatusCheckedAt
+                      ? ` · status diperiksa ${new Date(customerStatusCheckedAt).toLocaleString("id-ID")}`
+                      : ""}
+                  </p>
+                </div>
+                <div className="welcome-actions">
+                  <label className="secondary import-csv-btn">
+                    <FileSpreadsheet size={16} />
+                    {importingCustomers ? "Mengimpor…" : "Import CSV"}
+                    <input
+                      type="file"
+                      accept=".csv,text/csv"
+                      disabled={importingCustomers}
+                      onChange={(e) => {
+                        importCustomerFile(e.target.files?.[0]);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  <button
+                    className="secondary"
+                    onClick={() =>
+                      exportCsv("template-import-pelanggan.csv", [
+                        [
+                          "Nama",
+                          "Alamat",
+                          "No HP",
+                          "Paket Internet",
+                          "Layanan",
+                        ],
+                        [
+                          "Contoh Pelanggan",
+                          "Jl. Contoh No. 1",
+                          "081234567890",
+                          "Nama Paket",
+                          "internet",
+                        ],
+                      ])
+                    }
+                  >
+                    <FileSpreadsheet size={16} /> Template CSV
+                  </button>
+                  <button
+                    className="secondary"
+                    onClick={() =>
+                      exportCsv("pelanggan.csv", [
+                        [
+                          "Kode",
+                          "Nama",
+                          "No. HP",
+                          "Layanan",
+                          "Paket",
+                          "Router",
+                          "PPPoE",
+                          "Tanggal invoice",
+                          "Awal pembayaran",
+                          "Akhir pembayaran",
+                          "Dispensasi hari",
+                          "Jam isolir",
+                          "Kolektor",
+                          "Aktif",
+                          "Lewati isolir massal",
+                          "Status pelanggan",
+                          "Status isolir",
+                        ],
+                        ...filteredCustomers.map((c) => [
+                          c.customer_code,
+                          c.name,
+                          c.phone,
+                          c.service_type,
+                          c.package_name,
+                          c.router_name,
+                          c.pppoe_username,
+                          c.invoice_day_effective,
+                          c.payment_start_day_effective,
+                          c.payment_end_day_effective,
+                          c.grace_days_effective,
+                          c.isolation_time_effective,
+                          c.collector_name,
+                          c.active ? "Aktif" : "Nonaktif",
+                          c.skip_mass_isolation ? "Ya" : "Tidak",
+                          c.customer_status,
+                          c.isolation_status,
+                        ]),
+                      ])
+                    }
+                  >
+                    <FileSpreadsheet size={16} /> Export CSV
+                  </button>
+                  <button
+                    className="primary"
+                    onClick={() => {
+                      setEditingCustomer(null);
+                      setShowForm(true);
+                    }}
+                  >
+                    <Plus size={17} /> Tambah Pelanggan
+                  </button>
+                </div>
+              </div>
+              <div className="toolbar customer-toolbar">
+                <div className="search">
+                  <Search size={17} />
+                  <input
+                    placeholder="Cari nama, kode, PPPoE, nomor HP..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
+                <label className="filter-select">
+                  <span>Jenis layanan</span>
+                  <select
+                    value={customerServiceFilter}
+                    onChange={(e) => setCustomerServiceFilter(e.target.value)}
+                  >
+                    <option value="all">Semua layanan</option>
+                    <option value="internet">Internet</option>
+                    <option value="tv_cable">TV Kabel</option>
+                    <option value="bundle">Bundle</option>
+                  </select>
+                </label>
+                <label className="filter-select">
+                  <span>Status pelanggan</span>
+                  <select
+                    value={customerStatusFilter}
+                    onChange={(e) => setCustomerStatusFilter(e.target.value)}
+                  >
+                    <option value="all">Semua status</option>
+                    <option value="active">Aktif / tersambung</option>
+                    <option value="isolated">Terisolir</option>
+                    <option value="inactive">User nonaktif</option>
+                  </select>
+                </label>
+                <button
+                  className="secondary"
+                  onClick={refreshCustomerStatuses}
+                  disabled={loading}
+                >
+                  <RefreshCw size={15} /> Cek status
+                </button>
+                {auth.user.role !== "kolektor" && (
+                  <>
+                    <label className="filter-select">
+                      <span>
+                        Set kolektor untuk {selectedCustomers.length} pelanggan
+                      </span>
+                      <select
+                        value={bulkCollector}
+                        onChange={(e) => setBulkCollector(e.target.value)}
+                      >
+                        <option value="">Pilih kolektor</option>
+                        <option value="none">Hapus penugasan</option>
+                        {users
+                          .filter((u) => u.role === "kolektor" && u.active)
+                          .map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.name} ({u.username})
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <button
+                      className="secondary"
+                      disabled={!selectedCustomers.length || !bulkCollector}
+                      onClick={async () => {
+                        try {
+                          const result = await api(
+                            "/customers/collector/bulk",
+                            {
+                              method: "PUT",
+                              body: JSON.stringify({
+                                customer_ids: selectedCustomers,
+                                collector_id:
+                                  bulkCollector === "none"
+                                    ? null
+                                    : Number(bulkCollector),
+                              }),
+                            },
+                          );
+                          setNotice(
+                            `Kolektor diperbarui untuk ${result.updated} pelanggan.`,
+                          );
+                          setSelectedCustomers([]);
+                          setBulkCollector("");
+                          load();
+                        } catch (e) {
+                          setError(e.message);
+                        }
+                      }}
+                    >
+                      Terapkan ke pilihan
+                    </button>
+                  </>
+                )}
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      {auth.user.role !== "kolektor" && (
+                        <th>
+                          <input
+                            type="checkbox"
+                            aria-label="Pilih semua pelanggan"
+                            checked={
+                              filteredCustomers.length > 0 &&
+                              filteredCustomers.every((c) =>
+                                selectedCustomers.includes(c.id),
+                              )
+                            }
+                            onChange={(e) =>
+                              setSelectedCustomers(
+                                e.target.checked
+                                  ? [
+                                      ...new Set([
+                                        ...selectedCustomers,
+                                        ...filteredCustomers.map((c) => c.id),
+                                      ]),
+                                    ]
+                                  : selectedCustomers.filter(
+                                      (id) =>
+                                        !filteredCustomers.some(
+                                          (c) => c.id === id,
+                                        ),
+                                    ),
+                              )
+                            }
+                          />
+                        </th>
+                      )}
+                      <th>Pelanggan</th>
+                      <th>Layanan / PPPoE</th>
+                      <th>Paket</th>
+                      <th>Billing / Tenggang</th>
+                      <th>Kolektor</th>
+                      <th>Status user</th>
+                      <th>Status / IP MikroTik</th>
+                      <th>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredCustomers.map((c) => {
+                      const live = customerStatuses[c.id];
+                      return (
+                        <tr key={c.id}>
+                          {auth.user.role !== "kolektor" && (
+                            <td>
+                              <input
+                                type="checkbox"
+                                aria-label={`Pilih ${c.name}`}
+                                checked={selectedCustomers.includes(c.id)}
+                                onChange={(e) =>
+                                  setSelectedCustomers(
+                                    e.target.checked
+                                      ? [...selectedCustomers, c.id]
+                                      : selectedCustomers.filter(
+                                          (id) => id !== c.id,
+                                        ),
+                                  )
+                                }
+                              />
+                            </td>
+                          )}
+                          <td>
+                            <b>{c.name}</b>
+                            <small>
+                              {c.customer_code} · {c.phone || "Tanpa nomor HP"}
+                            </small>
+                          </td>
+                          <td>
+                            {{
+                              internet: "Internet",
+                              tv_cable: "TV Kabel",
+                              bundle: "Bundle",
+                            }[c.service_type] || c.service_type}
+                            <small>
+                              {c.pppoe_username || "Tidak menggunakan PPPoE"}
+                              {c.router_name ? ` · ${c.router_name}` : ""}
+                            </small>
+                          </td>
+                          <td>
+                            {c.package_name || "—"}
+                            <small>{money(c.package_price)}</small>
+                          </td>
+                          <td>
+                            Invoice tgl.{" "}
+                            {c.invoice_day_effective ||
+                              c.invoice_day_override ||
+                              "Global"}
+                            <small>
+                              Bayar tgl.{" "}
+                              {c.payment_start_day_effective ||
+                                c.payment_start_day_override ||
+                                "Global"}
+                              –
+                              {c.payment_end_day_effective ||
+                                c.payment_end_day_override ||
+                                "Global"}{" "}
+                              · Dispensasi{" "}
+                              {c.grace_days_effective ??
+                                c.grace_days_override ??
+                                "Global"}{" "}
+                              hari
+                            </small>
+                          </td>
+                          <td>{c.collector_name || "Belum ditugaskan"}</td>
+                          <td>
+                            <span
+                              className={"pill " + (c.active ? "green" : "red")}
+                            >
+                              {c.active ? "Aktif" : "Nonaktif"}
+                            </span>
+                            <small>
+                              {c.active
+                                ? "Menerima invoice"
+                                : "Invoice baru dihentikan"}
+                            </small>
+                          </td>
+                          <td>
+                            <span
+                              className={
+                                "pill " +
+                                (!c.active
+                                  ? "red"
+                                  : c.service_type === "tv_cable"
+                                    ? "yellow"
+                                    : c.isolation_status === "isolated"
+                                      ? "red"
+                                      : live?.status === "online"
+                                        ? "green"
+                                        : "yellow")
+                              }
+                            >
+                              {!c.active
+                                ? "Nonaktif"
+                                : c.service_type === "tv_cable"
+                                  ? "Tidak pakai MikroTik"
+                                  : !c.pppoe_username
+                                    ? "Belum terhubung"
+                                    : c.isolation_status === "isolated"
+                                      ? "Terisolir"
+                                      : live?.status === "online"
+                                        ? "Online"
+                                        : "Offline"}
+                            </span>
+                            <small>
+                              IP:{" "}
+                              {c.service_type === "tv_cable"
+                                ? "—"
+                                : live?.status === "online" && live.ip
+                                  ? live.ip
+                                  : !c.pppoe_username
+                                    ? "Belum ada PPPoE"
+                                    : "Offline"}
+                            </small>
+                          </td>
+                          <td>
+                            <div className="customer-row-actions">
+                              <button
+                                className="small-btn"
+                                onClick={() => openCustomerDetail(c)}
+                              >
+                                Detail
+                              </button>
+                              {auth.user.role !== "kolektor" &&
+                                c.service_type !== "tv_cable" &&
+                                Boolean(c.active) &&
+                                c.customer_status === "active" && (
+                                  <button
+                                    className={
+                                      "small-btn " +
+                                      (c.isolation_status === "isolated"
+                                        ? ""
+                                        : "danger-btn")
+                                    }
+                                    onClick={() => toggleCustomerIsolation(c)}
+                                    title={
+                                      c.isolation_status === "isolated"
+                                        ? "Aktifkan kembali pelanggan ini"
+                                        : "Isolir pelanggan ini saja"
+                                    }
+                                  >
+                                    {c.isolation_status === "isolated"
+                                      ? "Aktifkan"
+                                      : "Isolir"}
+                                  </button>
+                                )}
+                              <button
+                                className="small-btn"
+                                onClick={() => {
+                                  setEditingCustomer(c);
+                                  setShowForm(true);
+                                }}
+                              >
+                                Edit
+                              </button>
+                              {auth.user.role !== "kolektor" && (
+                                <>
+                                  <button
+                                    className="small-btn"
+                                    onClick={() => toggleCustomerActive(c)}
+                                    title={
+                                      c.active
+                                        ? "Nonaktifkan pelanggan"
+                                        : "Aktifkan pelanggan"
+                                    }
+                                  >
+                                    <Power size={13} />
+                                    {c.active ? "Nonaktifkan" : "Aktifkan"}
+                                  </button>
+                                  <button
+                                    className="small-btn danger-btn"
+                                    onClick={() => deleteCustomer(c)}
+                                    title="Hapus pelanggan"
+                                  >
+                                    <Trash2 size={13} /> Hapus
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {filteredCustomers.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={auth.user.role === "kolektor" ? 8 : 9}
+                          className="empty-cell"
+                        >
+                          Belum ada data pelanggan yang cocok.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </>
+        )}
+        {page === "Detail Pelanggan" && (
+          <section className="panel customer-detail-page">
+            <div className="panel-head">
+              <div>
+                <h3>Detail Pelanggan</h3>
+                <p>
+                  {customerDetail?.customer
+                    ? `${customerDetail.customer.customer_code} · ${customerDetail.customer.name}`
+                    : "Memuat data pelanggan…"}
+                </p>
+              </div>
+              <div className="welcome-actions">
+                <button
+                  className="secondary"
+                  onClick={() => setPage("Pelanggan")}
+                >
+                  Kembali ke Pelanggan
+                </button>
+                {detailCustomer && auth.user.role !== "kolektor" && (
+                  <button
+                    className="primary"
+                    onClick={() => {
+                      setEditingCustomer(detailCustomer);
+                      setPage("Pelanggan");
+                      setShowForm(true);
+                    }}
+                  >
+                    Edit Pelanggan
+                  </button>
+                )}
+              </div>
+            </div>
+            <CustomerDetailPage
+              loading={detailLoading}
+              data={customerDetail}
+              live={detailCustomer ? customerStatuses[detailCustomer.id] : null}
+              onPay={(invoice) => payment(invoice)}
+            />
+          </section>
+        )}
+        {page === "Tagihan" && (
+          <>
+            <div className="stats compact-stats invoice-stats">
+              <Stat
+                title="Total Tagihan Belum Lunas"
+                value={money(
+                  invoices
+                    .filter((i) => ["unpaid", "partial"].includes(i.status))
+                    .reduce((n, i) => n + Number(i.amount - i.paid_amount), 0),
+                )}
+                note={`${invoices.filter((i) => ["unpaid", "partial"].includes(i.status)).length} tagihan · klik untuk filter`}
+                icon={Receipt}
+                onClick={() => setInvoiceFilter("unpaid")}
+                active={invoiceFilter === "unpaid"}
+              />
+              <Stat
+                title="Total Tagihan Lunas"
+                value={money(
+                  invoices
+                    .filter((i) => i.status === "paid")
+                    .reduce((n, i) => n + Number(i.amount), 0),
+                )}
+                note={`${invoices.filter((i) => i.status === "paid").length} tagihan · klik untuk filter`}
+                icon={CreditCard}
+                onClick={() => setInvoiceFilter("paid")}
+                active={invoiceFilter === "paid"}
+              />
+              <Stat
+                title="Semua Tagihan"
+                value={invoices.length}
+                note="Klik untuk menampilkan semua"
+                icon={FileSpreadsheet}
+                onClick={() => setInvoiceFilter("all")}
+                active={invoiceFilter === "all"}
+              />
+            </div>
+            <section className="panel">
+              <div className="panel-head">
+                <div>
+                  <h3>Tagihan Pelanggan</h3>
+                  <p>
+                    Tagihan bulanan, status pelunasan, dan pengecualian isolir
+                    bulan ini
+                  </p>
+                </div>
+                <button className="primary" onClick={generate}>
+                  <Plus size={17} /> Generate Tagihan
+                </button>
+              </div>
+              <div className="toolbar">
+                <div className="search">
+                  <Search size={17} />
+                  <input
+                    placeholder="Cari nomor tagihan, nama atau kode pelanggan..."
+                    value={invoiceSearch}
+                    onChange={(e) => setInvoiceSearch(e.target.value)}
+                  />
+                </div>
+                <label className="filter-select">
+                  <span>Status tagihan</span>
+                  <select
+                    value={invoiceFilter}
+                    onChange={(e) => setInvoiceFilter(e.target.value)}
+                  >
+                    <option value="all">Semua status</option>
+                    <option value="unpaid">Belum lunas / sebagian</option>
+                    <option value="paid">Lunas</option>
+                    <option value="void">Batal</option>
+                  </select>
+                </label>
+              </div>
+              <InvoiceTable
+                rows={invoices.filter(
+                  (i) =>
+                    (invoiceFilter === "all" ||
+                      (invoiceFilter === "unpaid"
+                        ? ["unpaid", "partial"].includes(i.status)
+                        : i.status === invoiceFilter)) &&
+                    `${i.invoice_number} ${i.customer_name} ${i.customer_code}`
+                      .toLowerCase()
+                      .includes(invoiceSearch.toLowerCase()),
+                )}
+                onPay={payment}
+                onDelete={async (invoice) => {
+                  if (
+                    !window.confirm(
+                      `Hapus tagihan ${invoice.invoice_number}? Pembayaran yang terkait juga akan dihapus. Tindakan ini tidak dapat dibatalkan.`,
+                    )
+                  )
+                    return;
+                  try {
+                    await api(`/invoices/${invoice.id}`, { method: "DELETE" });
+                    setNotice(`Tagihan ${invoice.invoice_number} dihapus.`);
+                    load();
+                    if (page === "Pembayaran") loadPaymentHistory(paymentMonth);
+                  } catch (e) {
+                    setError(e.message);
+                  }
+                }}
+                onNunggak={async (invoice) => {
+                  try {
+                    const skip = !Boolean(invoice.skip_isolation);
+                    await api(`/invoices/${invoice.id}/nunggak`, {
+                      method: "PUT",
+                      body: JSON.stringify({ skip }),
+                    });
+                    setNotice(
+                      skip
+                        ? `NUNGGAK diaktifkan untuk ${invoice.invoice_number}; isolir bulan ini dilewati.`
+                        : `Pengecualian NUNGGAK dihapus untuk ${invoice.invoice_number}.`,
+                    );
+                    load();
+                  } catch (e) {
+                    setError(e.message);
+                  }
+                }}
+              />
+            </section>
+          </>
+        )}
+        {page === "Paket" && (
+          <PackagePage
+            packages={packages}
+            routers={routers}
+            onSaved={() => {
+              load();
+              setNotice("Paket berhasil disimpan.");
+            }}
+            onError={setError}
+          />
+        )}
+        {page === "Pembayaran" && (
+          <>
+            <section className="panel">
+              <div className="panel-head payment-filter-head">
+                <div>
+                  <h3>Riwayat Pembayaran</h3>
+                  <p>
+                    Filter pembayaran berdasarkan bulan, termasuk bulan-bulan
+                    sebelumnya.
+                  </p>
+                </div>
+                <label className="month-filter">
+                  <span>Bulan pembayaran</span>
+                  <input
+                    type="month"
+                    value={paymentMonth}
+                    onChange={(e) => setPaymentMonth(e.target.value)}
+                  />
+                </label>
+              </div>
+              <div className="payment-summary">
+                <div>
+                  <span>Total pembayaran bulan ini</span>
+                  <strong>{money(paymentHistory.total)}</strong>
+                </div>
+                <div>
+                  <span>Jumlah transaksi</span>
+                  <strong>{paymentHistory.count}</strong>
+                </div>
+                <div>
+                  <span>Periode</span>
+                  <strong>{paymentMonth}</strong>
+                </div>
+              </div>
+              {paymentLoading ? (
+                <div className="empty">Memuat riwayat pembayaran…</div>
+              ) : (
+                <PaymentHistoryTable rows={paymentHistory.rows} money={money} />
+              )}
+            </section>
+            <section className="panel">
+              <div className="panel-head">
+                <div>
+                  <h3>Tagihan Belum Lunas</h3>
+                  <p>
+                    Pilih tagihan untuk mencatat pembayaran cash atau transfer.
+                  </p>
+                </div>
+              </div>
+              <InvoiceTable
+                rows={invoices.filter((i) =>
+                  ["unpaid", "partial"].includes(i.status),
+                )}
+                onPay={payment}
+              />
+            </section>
+          </>
+        )}
+        {page === "Rekening" && (
+          <BankAccountsPage
+            accounts={bankAccounts}
+            onSaved={() => {
+              load();
+              setNotice("Data rekening berhasil disimpan.");
+            }}
+            onError={setError}
+          />
+        )}
+        {page === "MikroTik" && (
+          <RouterPage
+            routers={routers}
+            onSaved={() => {
+              load();
+              setNotice("Router berhasil ditambahkan.");
+            }}
+            onError={setError}
+          />
+        )}
+
+        {page === "Laporan Keuangan Bulanan" && (
+          <MonthlyReportPage onError={setError} />
+        )}
+        {page === "Pengeluaran" && (
+          <ExpensesPage
+            rows={expenses}
+            onSaved={async () => {
+              setExpenses(await api("/expenses"));
+              setNotice("Pengeluaran tersimpan.");
+            }}
+            onError={setError}
+          />
+        )}
+        {page === "Aset" && (
+          <AssetsPage
+            rows={assets}
+            onSaved={async () => {
+              setAssets(await api("/assets"));
+              setNotice("Aset tersimpan.");
+            }}
+            onError={setError}
+          />
+        )}
+        {page === "Manajemen User" && (
+          <UsersPage
+            rows={users}
+            currentUser={auth.user}
+            onSaved={async () => {
+              setUsers(await api("/users"));
+              setNotice("Data user diperbarui.");
+            }}
+            onError={setError}
+          />
+        )}
+        {page === "Profile" && (
+          <ProfilePage
+            user={auth.user}
+            onSaved={async () => {
+              const p = await api("/profile");
+              auth.setUser(p);
+              setNotice("Profile berhasil diperbarui.");
+            }}
+            onError={setError}
+          />
+        )}
+        {page === "Pengaturan" && (
+          <BrandSettings
+            brand={brand}
+            onSaved={async () => {
+              const v = await api("/brand");
+              setBrand(v.brand_name);
+              setNotice("Nama brand berhasil diperbarui.");
+            }}
+            onError={setError}
+          />
+        )}
+        {page === "Pengaturan" && (
+          <SettingsPage
+            onSaved={() => setNotice("Pengaturan billing disimpan.")}
+            onError={setError}
+          />
+        )}
+        {showForm && page === "Pelanggan" && (
+          <CustomerForm
+            key={editingCustomer?.id || "new-customer"}
+            customer={editingCustomer}
+            packages={packages}
+            routers={routers}
+            users={users}
+            canAssignCollector={auth.user.role !== "kolektor"}
+            globalInvoiceDay={1}
+            onCancel={() => {
+              setShowForm(false);
+              setEditingCustomer(null);
+            }}
+            onSaved={() => {
+              setShowForm(false);
+              setEditingCustomer(null);
+              load();
+              refreshCustomerStatuses();
+              setNotice(
+                editingCustomer
+                  ? "Data pelanggan berhasil diperbarui."
+                  : "Pelanggan berhasil ditambahkan.",
+              );
+            }}
+            onError={setError}
+          />
+        )}
+        {paymentTarget && (
+          <PaymentModal
+            invoice={paymentTarget}
+            accounts={bankAccounts.filter((a) => a.is_active)}
+            onClose={() => setPaymentTarget(null)}
+            onSubmit={savePayment}
+          />
+        )}
+        <footer>
+          BillingNet MVP <span>·</span> Zona waktu Asia/Jakarta <span>·</span>{" "}
+          {loading
+            ? "Memuat data…"
+            : "Terhubung ke API jika tidak ada pesan error"}
+        </footer>
+      </main>
+    </div>
+  );
 }
 
-function exportCsv(filename, rows){
- const csv=rows.map(row=>row.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(';')).join('\r\n');
- const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);
- const a=document.createElement('a');a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url);
+function normalizeService(value) {
+  const v = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (!v) return "";
+  if (["tv", "tv kabel", "tv_cable", "televisi"].includes(v)) return "tv_cable";
+  if (["bundle", "internet + tv", "internet+tv", "paket bundling"].includes(v))
+    return "bundle";
+  return "internet";
 }
-function Modal({title,subtitle,onClose,children}){return <div className="modal-backdrop"><section className="payment-modal"><div className="modal-head"><div><h3>{title}</h3>{subtitle&&<p>{subtitle}</p>}</div><button className="icon-btn" type="button" onClick={onClose}><X size={17}/></button></div>{children}</section></div>}
-function MonthlyReportPage({onError}){
- const [month,setMonth]=useState(new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Jakarta'}).slice(0,7));const [data,setData]=useState({rows:[],totalUsers:0,totalRevenue:0}); 
- useEffect(()=>{api(`/reports/monthly?month=${month}`).then(setData).catch(e=>onError(e.message))},[month]);
- return <section className="panel"><div className="panel-head"><div><h3>Laporan Keuangan Bulanan</h3><p>Rekap pelanggan yang melakukan pembayaran dan pendapatan transaksi.</p></div><label className="month-filter"><span>Periode</span><input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label></div>
- <div className="stats compact-stats"><Stat title="Pelanggan Membayar" value={data.totalUsers} note="Pelanggan unik pada periode ini" icon={Users}/><Stat title="Total Pendapatan" value={money(data.totalRevenue)} note={`Periode ${month}`} icon={Banknote}/><Stat title="Transaksi" value={data.rows.length} note="Semua transaksi pembayaran" icon={CreditCard}/></div>
- <div className="panel-head"><div><h3>Daftar pembayaran</h3><p>Nominal per transaksi beserta pelanggan dan tanggal.</p></div><button className="secondary" onClick={()=>exportCsv(`laporan-keuangan-${month}.csv`,[['Tanggal','Kode pelanggan','Nama pelanggan','No. kuitansi','Tagihan','Metode','Jumlah bayar'],...data.rows.map(r=>[r.paid_at,r.customer_code,r.customer_name,r.receipt_number,r.invoice_number,r.method,r.amount])])}><FileSpreadsheet size={16}/> Export Excel (CSV)</button></div>
- <div className="table-wrap"><table><thead><tr><th>Tanggal</th><th>Pelanggan</th><th>No. kuitansi / tagihan</th><th>Metode</th><th>Jumlah bayar</th></tr></thead><tbody>{data.rows.map(r=><tr key={r.id}><td>{new Date(r.paid_at).toLocaleString('id-ID')}</td><td><b>{r.customer_name}</b><small>{r.customer_code}</small></td><td>{r.receipt_number}<small>{r.invoice_number}</small></td><td>{r.method==='cash'?'Tunai':'Transfer'}</td><td>{money(r.amount)}</td></tr>)}{!data.rows.length&&<tr><td colSpan="5" className="empty-cell">Belum ada pembayaran pada bulan ini.</td></tr>}</tbody></table></div></section>
+function parseCsv(input) {
+  const rows = [];
+  let row = [],
+    field = "",
+    quoted = false;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i],
+      next = input[i + 1];
+    if (ch === '"' && quoted && next === '"') {
+      field += '"';
+      i++;
+    } else if (ch === '"') {
+      quoted = !quoted;
+    } else if ((ch === "," || ch === ";" || ch === "\t") && !quoted) {
+      row.push(field);
+      field = "";
+    } else if ((ch === "\n" || ch === "\r") && !quoted) {
+      if (ch === "\r" && next === "\n") i++;
+      row.push(field);
+      if (row.some((v) => v.trim())) rows.push(row);
+      row = [];
+      field = "";
+    } else field += ch;
+  }
+  row.push(field);
+  if (row.some((v) => v.trim())) rows.push(row);
+  return rows;
 }
-function ExpensesPage({rows,onSaved,onError}){
- const [show,setShow]=useState(false),[editing,setEditing]=useState(null);const [f,setF]=useState({description:'',category:'Operasional',amount:'',expense_date:new Date().toLocaleDateString('sv-SE'),payment_method:'cash',notes:''});
- function open(row){setEditing(row||null);setF(row?{...row,amount:String(row.amount),expense_date:String(row.expense_date).slice(0,10)}:{description:'',category:'Operasional',amount:'',expense_date:new Date().toLocaleDateString('sv-SE'),payment_method:'cash',notes:''});setShow(true)}
- async function submit(e){e.preventDefault();try{await api(editing?`/expenses/${editing.id}`:'/expenses',{method:editing?'PUT':'POST',body:JSON.stringify({...f,amount:Number(f.amount)})});setShow(false);await onSaved()}catch(e){onError(e.message)}}
- return <section className="panel"><div className="panel-head"><div><h3>Pengeluaran</h3><p>Catat biaya operasional dan unduh data untuk Excel.</p></div><div className="welcome-actions"><button className="secondary" onClick={()=>exportCsv('pengeluaran.csv',[['Tanggal','Deskripsi','Kategori','Nominal','Metode','Catatan','Dicatat oleh'],...rows.map(r=>[r.expense_date,r.description,r.category,r.amount,r.payment_method,r.notes,r.created_by])])}><FileSpreadsheet size={16}/> Export Excel (CSV)</button><button className="primary" onClick={()=>open()}><Plus size={16}/> Tambah Pengeluaran</button></div></div>
- <div className="payment-summary"><div><span>Total pengeluaran</span><strong>{money(rows.reduce((n,r)=>n+Number(r.amount||0),0))}</strong></div><div><span>Jumlah catatan</span><strong>{rows.length}</strong></div></div>
- <div className="table-wrap"><table><thead><tr><th>Tanggal</th><th>Deskripsi</th><th>Kategori</th><th>Metode</th><th>Nominal</th><th>Aksi</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td>{String(r.expense_date).slice(0,10)}</td><td><b>{r.description}</b><small>{r.notes||''}</small></td><td>{r.category}</td><td>{r.payment_method}</td><td>{money(r.amount)}</td><td><button className="small-btn" onClick={()=>open(r)}>Edit</button></td></tr>)}{!rows.length&&<tr><td colSpan="6" className="empty-cell">Belum ada pengeluaran.</td></tr>}</tbody></table></div>
- {show&&<Modal title={editing?'Edit Pengeluaran':'Tambah Pengeluaran'} onClose={()=>setShow(false)}><form className="form-grid modal-form" onSubmit={submit}><Field label="Deskripsi"><input required value={f.description} onChange={e=>setF({...f,description:e.target.value})}/></Field><Field label="Kategori"><input value={f.category} onChange={e=>setF({...f,category:e.target.value})}/></Field><Field label="Nominal (Rp)"><input type="number" min="1" required value={f.amount} onChange={e=>setF({...f,amount:e.target.value})}/></Field><Field label="Tanggal"><input type="date" required value={f.expense_date} onChange={e=>setF({...f,expense_date:e.target.value})}/></Field><Field label="Metode"><select value={f.payment_method} onChange={e=>setF({...f,payment_method:e.target.value})}><option value="cash">Cash</option><option value="transfer">Transfer</option></select></Field><Field label="Catatan" wide><textarea value={f.notes||''} onChange={e=>setF({...f,notes:e.target.value})}/></Field><div className="form-actions"><button type="button" className="secondary" onClick={()=>setShow(false)}>Batal</button><button className="primary">Simpan</button></div></form></Modal>}
- </section>
+function exportCsv(filename, rows) {
+  const csv = rows
+    .map((row) =>
+      row.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";"),
+    )
+    .join("\r\n");
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
-function AssetsPage({rows,onSaved,onError}){
- const [filter,setFilter]=useState('all'),[show,setShow]=useState(false),[editing,setEditing]=useState(null),[f,setF]=useState({asset_type:'ont',name:'ONT',serial_number:'',brand:'',model:'',quantity:1,condition_status:'baik',location:'',notes:''});
- const list=rows.filter(r=>filter==='all'||r.asset_type===filter);
- function scanInput(e){setF({...f,serial_number:e.target.value.trim()})}
- function openAsset(row=null){setEditing(row?.id||null);setF(row?{...row,quantity:Number(row.quantity)}:{asset_type:'ont',name:'ONT',serial_number:'',brand:'',model:'',quantity:1,condition_status:'baik',location:'',notes:''});setShow(true)}
- async function submit(e){e.preventDefault();try{await api(editing?`/assets/${editing}`:'/assets',{method:editing?'PUT':'POST',body:JSON.stringify(f)});setShow(false);setEditing(null);setF({...f,serial_number:'',name:f.asset_type==='ont'?'ONT':''});await onSaved()}catch(e){onError(e.message)}}
- return <section className="panel"><div className="panel-head"><div><h3>Manajemen Aset</h3><p>Inventaris ONT dan aset lainnya.</p></div><button className="primary" onClick={()=>openAsset()}><Plus size={16}/> Tambah Aset</button></div>
- <div className="toolbar"><label className="filter-select"><span>Jenis aset</span><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">Semua aset</option><option value="ont">ONT</option><option value="other">Aset lainnya</option></select></label><button className="secondary" onClick={()=>exportCsv(`aset-${filter}.csv`,[['Jenis','Nama aset','SN','Merek','Model','Jumlah','Kondisi','Lokasi','Catatan'],...list.map(r=>[r.asset_type==='ont'?'ONT':'Lainnya',r.name,r.serial_number,r.brand,r.model,r.quantity,r.condition_status,r.location,r.notes])])}><FileSpreadsheet size={16}/> Export Excel (CSV)</button></div>
- <div className="table-wrap"><table><thead><tr><th>Jenis</th><th>Nama aset</th><th>Serial Number</th><th>Merek / Model</th><th>Jumlah</th><th>Kondisi</th><th>Lokasi</th><th>Aksi</th></tr></thead><tbody>{list.map(r=><tr key={r.id}><td>{r.asset_type==='ont'?'ONT':'Lainnya'}</td><td><b>{r.name}</b></td><td>{r.serial_number}</td><td>{r.brand||'—'} / {r.model||'—'}</td><td>{r.quantity}</td><td>{r.condition_status}</td><td>{r.location||'—'}</td><td><button className="small-btn" onClick={()=>openAsset(r)}>Edit</button></td></tr>)}{!list.length&&<tr><td colSpan="8" className="empty-cell">Belum ada aset.</td></tr>}</tbody></table></div>
- {show&&<Modal title={editing?'Edit Aset':'Tambah Aset'} subtitle="Untuk SN ONT, klik kolom Serial Number lalu scan dengan barcode scanner (scanner bertindak seperti keyboard), atau ketik manual." onClose={()=>setShow(false)}><form className="form-grid modal-form" onSubmit={submit}><Field label="Jenis aset"><select disabled={Boolean(editing)} value={f.asset_type} onChange={e=>setF({...f,asset_type:e.target.value,name:e.target.value==='ont'?'ONT':''})}><option value="ont">ONT</option><option value="other">Aset lainnya</option></select></Field><Field label="Nama aset"><input required value={f.name} onChange={e=>setF({...f,name:e.target.value})}/></Field><Field label="Serial Number / SN"><input autoFocus required value={f.serial_number} onChange={scanInput} placeholder="Scan SN atau input manual"/></Field><Field label="Merek"><input value={f.brand} onChange={e=>setF({...f,brand:e.target.value})}/></Field><Field label="Model"><input value={f.model} onChange={e=>setF({...f,model:e.target.value})}/></Field><Field label="Jumlah"><input type="number" min="1" value={f.quantity} onChange={e=>setF({...f,quantity:Number(e.target.value)})}/></Field><Field label="Kondisi"><select value={f.condition_status} onChange={e=>setF({...f,condition_status:e.target.value})}><option value="baik">Baik</option><option value="rusak">Rusak</option><option value="perbaikan">Perbaikan</option></select></Field><Field label="Lokasi"><input value={f.location} onChange={e=>setF({...f,location:e.target.value})}/></Field><Field label="Catatan" wide><textarea value={f.notes} onChange={e=>setF({...f,notes:e.target.value})}/></Field><div className="form-actions"><button type="button" className="secondary" onClick={()=>setShow(false)}>Batal</button><button className="primary">{editing?'Simpan Perubahan':'Simpan Aset'}</button></div></form></Modal>}
- </section>
+function Modal({ title, subtitle, onClose, children }) {
+  return (
+    <div className="modal-backdrop">
+      <section className="payment-modal">
+        <div className="modal-head">
+          <div>
+            <h3>{title}</h3>
+            {subtitle && <p>{subtitle}</p>}
+          </div>
+          <button className="icon-btn" type="button" onClick={onClose}>
+            <X size={17} />
+          </button>
+        </div>
+        {children}
+      </section>
+    </div>
+  );
 }
-function UsersPage({rows,currentUser,onSaved,onError}){
- const [show,setShow]=useState(false),[editing,setEditing]=useState(null),[f,setF]=useState({name:'',username:'',password:'',role:'kolektor',active:true});
- function openNew(){setEditing(null);setF({name:'',username:'',password:'',role:'kolektor',active:true});setShow(true)}
- function openEdit(u){setEditing(u);setF({name:u.name,username:u.username,password:'',role:u.role,active:Boolean(u.active)});setShow(true)}
- async function submit(e){e.preventDefault();try{if(editing)await api(`/users/${editing.id}`,{method:'PUT',body:JSON.stringify({role:f.role,active:f.active})});else await api('/users',{method:'POST',body:JSON.stringify(f)});setShow(false);setEditing(null);await onSaved()}catch(e){onError(e.message)}}
- return <section className="panel"><div className="panel-head"><div><h3>Manajemen User</h3><p>Buat akun dan tentukan hak akses aplikasi.</p></div><button className="primary" onClick={openNew}><Plus size={16}/> Tambah User</button></div><div className="table-wrap"><table><thead><tr><th>Nama</th><th>Username</th><th>Role</th><th>Status</th><th>Aksi</th></tr></thead><tbody>{rows.map(u=><tr key={u.id}><td><b>{u.name}</b>{u.id===currentUser.id&&<small>Akun Anda</small>}</td><td>{u.username}</td><td>{u.role}</td><td>{u.active?'Aktif':'Nonaktif'}</td><td><button className="small-btn" disabled={u.id===currentUser.id||(currentUser.role==='admin'&&u.role==='superadmin')} onClick={()=>openEdit(u)}>Edit akses</button></td></tr>)}</tbody></table></div>
- {show&&<Modal title={editing?'Edit Akses User':'Tambah User'} onClose={()=>setShow(false)}><form className="form-grid modal-form" onSubmit={submit}>{!editing&&<><Field label="Nama"><input required value={f.name} onChange={e=>setF({...f,name:e.target.value})}/></Field><Field label="Username"><input required autoComplete="off" value={f.username} onChange={e=>setF({...f,username:e.target.value})}/></Field><Field label="Password awal (min. 8 karakter)"><input required minLength="8" type="password" value={f.password} onChange={e=>setF({...f,password:e.target.value})}/></Field></>}<Field label="Role"><select value={f.role} onChange={e=>setF({...f,role:e.target.value})}><option value="admin">Admin</option><option value="kolektor">Kolektor</option>{currentUser.role==='superadmin'&&<option value="superadmin">Superadmin</option>}</select></Field>{editing&&<Field label="Status akun"><select value={String(f.active)} onChange={e=>setF({...f,active:e.target.value==='true'})}><option value="true">Aktif</option><option value="false">Nonaktif</option></select></Field>}<div className="form-actions"><button type="button" className="secondary" onClick={()=>setShow(false)}>Batal</button><button className="primary">{editing?'Simpan Perubahan':'Buat User'}</button></div></form></Modal>}
- </section>
+function MonthlyReportPage({ onError }) {
+  const [month, setMonth] = useState(
+    new Date()
+      .toLocaleDateString("sv-SE", { timeZone: "Asia/Jakarta" })
+      .slice(0, 7),
+  );
+  const [data, setData] = useState({
+    rows: [],
+    totalUsers: 0,
+    totalRevenue: 0,
+  });
+  useEffect(() => {
+    api(`/reports/monthly?month=${month}`)
+      .then(setData)
+      .catch((e) => onError(e.message));
+  }, [month]);
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>Laporan Keuangan Bulanan</h3>
+          <p>
+            Rekap pelanggan yang melakukan pembayaran dan pendapatan transaksi.
+          </p>
+        </div>
+        <label className="month-filter">
+          <span>Periode</span>
+          <input
+            type="month"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+          />
+        </label>
+      </div>
+      <div className="stats compact-stats">
+        <Stat
+          title="Pelanggan Membayar"
+          value={data.totalUsers}
+          note="Pelanggan unik pada periode ini"
+          icon={Users}
+        />
+        <Stat
+          title="Total Pendapatan"
+          value={money(data.totalRevenue)}
+          note={`Periode ${month}`}
+          icon={Banknote}
+        />
+        <Stat
+          title="Transaksi"
+          value={data.rows.length}
+          note="Semua transaksi pembayaran"
+          icon={CreditCard}
+        />
+      </div>
+      <div className="panel-head">
+        <div>
+          <h3>Daftar pembayaran</h3>
+          <p>Nominal per transaksi beserta pelanggan dan tanggal.</p>
+        </div>
+        <button
+          className="secondary"
+          onClick={() =>
+            exportCsv(`laporan-keuangan-${month}.csv`, [
+              [
+                "Tanggal",
+                "Kode pelanggan",
+                "Nama pelanggan",
+                "No. kuitansi",
+                "Tagihan",
+                "Metode",
+                "Jumlah bayar",
+              ],
+              ...data.rows.map((r) => [
+                r.paid_at,
+                r.customer_code,
+                r.customer_name,
+                r.receipt_number,
+                r.invoice_number,
+                r.method,
+                r.amount,
+              ]),
+            ])
+          }
+        >
+          <FileSpreadsheet size={16} /> Export Excel (CSV)
+        </button>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Tanggal</th>
+              <th>Pelanggan</th>
+              <th>No. kuitansi / tagihan</th>
+              <th>Metode</th>
+              <th>Jumlah bayar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.rows.map((r) => (
+              <tr key={r.id}>
+                <td>{new Date(r.paid_at).toLocaleString("id-ID")}</td>
+                <td>
+                  <b>{r.customer_name}</b>
+                  <small>{r.customer_code}</small>
+                </td>
+                <td>
+                  {r.receipt_number}
+                  <small>{r.invoice_number}</small>
+                </td>
+                <td>{r.method === "cash" ? "Tunai" : "Transfer"}</td>
+                <td>{money(r.amount)}</td>
+              </tr>
+            ))}
+            {!data.rows.length && (
+              <tr>
+                <td colSpan="5" className="empty-cell">
+                  Belum ada pembayaran pada bulan ini.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
 }
-function ProfilePage({user,onSaved,onError}){
- const [show,setShow]=useState(false),[f,setF]=useState({name:user.name,password:'',confirm:''});
- async function submit(e){e.preventDefault();if(f.password&&f.password!==f.confirm)return onError('Konfirmasi password tidak sama.');try{await api('/profile',{method:'PUT',body:JSON.stringify({name:f.name,password:f.password})});setShow(false);setF({...f,password:'',confirm:''});await onSaved()}catch(e){onError(e.message)}}
- return <section className="panel"><div className="panel-head"><div><h3>Profile Saya</h3><p>Ubah nama tampilan dan password akun sendiri.</p></div><button className="primary" onClick={()=>setShow(true)}>Edit Profile</button></div><div className="profile-summary"><p><b>Nama:</b> {user.name}</p><p><b>Username:</b> {user.username}</p><p><b>Role:</b> {user.role}</p></div>
- {show&&<Modal title="Edit Profile" subtitle="Kosongkan password jika tidak ingin mengubahnya." onClose={()=>setShow(false)}><form className="form-grid modal-form" onSubmit={submit}><Field label="Nama tampilan"><input required value={f.name} onChange={e=>setF({...f,name:e.target.value})}/></Field><Field label="Username"><input value={user.username} disabled/></Field><Field label="Role"><input value={user.role} disabled/></Field><Field label="Password baru (opsional, min. 8 karakter)"><input type="password" minLength="8" value={f.password} onChange={e=>setF({...f,password:e.target.value})}/></Field><Field label="Konfirmasi password baru"><input type="password" value={f.confirm} onChange={e=>setF({...f,confirm:e.target.value})}/></Field><div className="form-actions"><button type="button" className="secondary" onClick={()=>setShow(false)}>Batal</button><button className="primary">Simpan Profile</button></div></form></Modal>}
- </section>
+function ExpensesPage({ rows, onSaved, onError }) {
+  const [show, setShow] = useState(false),
+    [editing, setEditing] = useState(null);
+  const [f, setF] = useState({
+    description: "",
+    category: "Operasional",
+    amount: "",
+    expense_date: new Date().toLocaleDateString("sv-SE"),
+    payment_method: "cash",
+    notes: "",
+  });
+  function open(row) {
+    setEditing(row || null);
+    setF(
+      row
+        ? {
+            ...row,
+            amount: String(row.amount),
+            expense_date: String(row.expense_date).slice(0, 10),
+          }
+        : {
+            description: "",
+            category: "Operasional",
+            amount: "",
+            expense_date: new Date().toLocaleDateString("sv-SE"),
+            payment_method: "cash",
+            notes: "",
+          },
+    );
+    setShow(true);
+  }
+  async function submit(e) {
+    e.preventDefault();
+    try {
+      await api(editing ? `/expenses/${editing.id}` : "/expenses", {
+        method: editing ? "PUT" : "POST",
+        body: JSON.stringify({ ...f, amount: Number(f.amount) }),
+      });
+      setShow(false);
+      await onSaved();
+    } catch (e) {
+      onError(e.message);
+    }
+  }
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>Pengeluaran</h3>
+          <p>Catat biaya operasional dan unduh data untuk Excel.</p>
+        </div>
+        <div className="welcome-actions">
+          <button
+            className="secondary"
+            onClick={() =>
+              exportCsv("pengeluaran.csv", [
+                [
+                  "Tanggal",
+                  "Deskripsi",
+                  "Kategori",
+                  "Nominal",
+                  "Metode",
+                  "Catatan",
+                  "Dicatat oleh",
+                ],
+                ...rows.map((r) => [
+                  r.expense_date,
+                  r.description,
+                  r.category,
+                  r.amount,
+                  r.payment_method,
+                  r.notes,
+                  r.created_by,
+                ]),
+              ])
+            }
+          >
+            <FileSpreadsheet size={16} /> Export Excel (CSV)
+          </button>
+          <button className="primary" onClick={() => open()}>
+            <Plus size={16} /> Tambah Pengeluaran
+          </button>
+        </div>
+      </div>
+      <div className="payment-summary">
+        <div>
+          <span>Total pengeluaran</span>
+          <strong>
+            {money(rows.reduce((n, r) => n + Number(r.amount || 0), 0))}
+          </strong>
+        </div>
+        <div>
+          <span>Jumlah catatan</span>
+          <strong>{rows.length}</strong>
+        </div>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Tanggal</th>
+              <th>Deskripsi</th>
+              <th>Kategori</th>
+              <th>Metode</th>
+              <th>Nominal</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id}>
+                <td>{String(r.expense_date).slice(0, 10)}</td>
+                <td>
+                  <b>{r.description}</b>
+                  <small>{r.notes || ""}</small>
+                </td>
+                <td>{r.category}</td>
+                <td>{r.payment_method}</td>
+                <td>{money(r.amount)}</td>
+                <td>
+                  <button className="small-btn" onClick={() => open(r)}>
+                    Edit
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {!rows.length && (
+              <tr>
+                <td colSpan="6" className="empty-cell">
+                  Belum ada pengeluaran.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {show && (
+        <Modal
+          title={editing ? "Edit Pengeluaran" : "Tambah Pengeluaran"}
+          onClose={() => setShow(false)}
+        >
+          <form className="form-grid modal-form" onSubmit={submit}>
+            <Field label="Deskripsi">
+              <input
+                required
+                value={f.description}
+                onChange={(e) => setF({ ...f, description: e.target.value })}
+              />
+            </Field>
+            <Field label="Kategori">
+              <input
+                value={f.category}
+                onChange={(e) => setF({ ...f, category: e.target.value })}
+              />
+            </Field>
+            <Field label="Nominal (Rp)">
+              <input
+                type="number"
+                min="1"
+                required
+                value={f.amount}
+                onChange={(e) => setF({ ...f, amount: e.target.value })}
+              />
+            </Field>
+            <Field label="Tanggal">
+              <input
+                type="date"
+                required
+                value={f.expense_date}
+                onChange={(e) => setF({ ...f, expense_date: e.target.value })}
+              />
+            </Field>
+            <Field label="Metode">
+              <select
+                value={f.payment_method}
+                onChange={(e) => setF({ ...f, payment_method: e.target.value })}
+              >
+                <option value="cash">Cash</option>
+                <option value="transfer">Transfer</option>
+              </select>
+            </Field>
+            <Field label="Catatan" wide>
+              <textarea
+                value={f.notes || ""}
+                onChange={(e) => setF({ ...f, notes: e.target.value })}
+              />
+            </Field>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setShow(false)}
+              >
+                Batal
+              </button>
+              <button className="primary">Simpan</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </section>
+  );
 }
-function BrandSettings({brand,onSaved,onError}){
- const [name,setName]=useState(brand),[show,setShow]=useState(false);useEffect(()=>setName(brand),[brand]);
- async function submit(e){e.preventDefault();try{await api('/brand',{method:'PUT',body:JSON.stringify({brand_name:name})});setShow(false);await onSaved()}catch(e){onError(e.message)}}
- return <section className="panel"><div className="panel-head"><div><h3>Identitas Aplikasi</h3><p>Nama brand yang tampil pada sidebar aplikasi.</p><p><b>Brand saat ini:</b> {brand}</p></div><button className="primary" onClick={()=>setShow(true)}>Ubah Nama Brand</button></div>
- {show&&<Modal title="Ubah Nama Brand" onClose={()=>setShow(false)}><form className="form-grid modal-form" onSubmit={submit}><Field label="Nama brand"><input required maxLength="120" value={name} onChange={e=>setName(e.target.value)}/></Field><div className="form-actions"><button type="button" className="secondary" onClick={()=>setShow(false)}>Batal</button><button className="primary">Simpan Nama Brand</button></div></form></Modal>}
- </section>
+function AssetsPage({ rows, onSaved, onError }) {
+  const [filter, setFilter] = useState("all"),
+    [show, setShow] = useState(false),
+    [editing, setEditing] = useState(null),
+    [f, setF] = useState({
+      asset_type: "ont",
+      name: "ONT",
+      serial_number: "",
+      brand: "",
+      model: "",
+      quantity: 1,
+      condition_status: "baik",
+      location: "",
+      notes: "",
+    });
+  const list = rows.filter((r) => filter === "all" || r.asset_type === filter);
+  function scanInput(e) {
+    setF({ ...f, serial_number: e.target.value.trim() });
+  }
+  function openAsset(row = null) {
+    setEditing(row?.id || null);
+    setF(
+      row
+        ? { ...row, quantity: Number(row.quantity) }
+        : {
+            asset_type: "ont",
+            name: "ONT",
+            serial_number: "",
+            brand: "",
+            model: "",
+            quantity: 1,
+            condition_status: "baik",
+            location: "",
+            notes: "",
+          },
+    );
+    setShow(true);
+  }
+  async function submit(e) {
+    e.preventDefault();
+    try {
+      await api(editing ? `/assets/${editing}` : "/assets", {
+        method: editing ? "PUT" : "POST",
+        body: JSON.stringify(f),
+      });
+      setShow(false);
+      setEditing(null);
+      setF({
+        ...f,
+        serial_number: "",
+        name: f.asset_type === "ont" ? "ONT" : "",
+      });
+      await onSaved();
+    } catch (e) {
+      onError(e.message);
+    }
+  }
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>Manajemen Aset</h3>
+          <p>Inventaris ONT dan aset lainnya.</p>
+        </div>
+        <button className="primary" onClick={() => openAsset()}>
+          <Plus size={16} /> Tambah Aset
+        </button>
+      </div>
+      <div className="toolbar">
+        <label className="filter-select">
+          <span>Jenis aset</span>
+          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+            <option value="all">Semua aset</option>
+            <option value="ont">ONT</option>
+            <option value="other">Aset lainnya</option>
+          </select>
+        </label>
+        <button
+          className="secondary"
+          onClick={() =>
+            exportCsv(`aset-${filter}.csv`, [
+              [
+                "Jenis",
+                "Nama aset",
+                "SN",
+                "Merek",
+                "Model",
+                "Jumlah",
+                "Kondisi",
+                "Lokasi",
+                "Catatan",
+              ],
+              ...list.map((r) => [
+                r.asset_type === "ont" ? "ONT" : "Lainnya",
+                r.name,
+                r.serial_number,
+                r.brand,
+                r.model,
+                r.quantity,
+                r.condition_status,
+                r.location,
+                r.notes,
+              ]),
+            ])
+          }
+        >
+          <FileSpreadsheet size={16} /> Export Excel (CSV)
+        </button>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Jenis</th>
+              <th>Nama aset</th>
+              <th>Serial Number</th>
+              <th>Merek / Model</th>
+              <th>Jumlah</th>
+              <th>Kondisi</th>
+              <th>Lokasi</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.map((r) => (
+              <tr key={r.id}>
+                <td>{r.asset_type === "ont" ? "ONT" : "Lainnya"}</td>
+                <td>
+                  <b>{r.name}</b>
+                </td>
+                <td>{r.serial_number}</td>
+                <td>
+                  {r.brand || "—"} / {r.model || "—"}
+                </td>
+                <td>{r.quantity}</td>
+                <td>{r.condition_status}</td>
+                <td>{r.location || "—"}</td>
+                <td>
+                  <button className="small-btn" onClick={() => openAsset(r)}>
+                    Edit
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {!list.length && (
+              <tr>
+                <td colSpan="8" className="empty-cell">
+                  Belum ada aset.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {show && (
+        <Modal
+          title={editing ? "Edit Aset" : "Tambah Aset"}
+          subtitle="Untuk SN ONT, klik kolom Serial Number lalu scan dengan barcode scanner (scanner bertindak seperti keyboard), atau ketik manual."
+          onClose={() => setShow(false)}
+        >
+          <form className="form-grid modal-form" onSubmit={submit}>
+            <Field label="Jenis aset">
+              <select
+                disabled={Boolean(editing)}
+                value={f.asset_type}
+                onChange={(e) =>
+                  setF({
+                    ...f,
+                    asset_type: e.target.value,
+                    name: e.target.value === "ont" ? "ONT" : "",
+                  })
+                }
+              >
+                <option value="ont">ONT</option>
+                <option value="other">Aset lainnya</option>
+              </select>
+            </Field>
+            <Field label="Nama aset">
+              <input
+                required
+                value={f.name}
+                onChange={(e) => setF({ ...f, name: e.target.value })}
+              />
+            </Field>
+            <Field label="Serial Number / SN">
+              <input
+                autoFocus
+                required
+                value={f.serial_number}
+                onChange={scanInput}
+                placeholder="Scan SN atau input manual"
+              />
+            </Field>
+            <Field label="Merek">
+              <input
+                value={f.brand}
+                onChange={(e) => setF({ ...f, brand: e.target.value })}
+              />
+            </Field>
+            <Field label="Model">
+              <input
+                value={f.model}
+                onChange={(e) => setF({ ...f, model: e.target.value })}
+              />
+            </Field>
+            <Field label="Jumlah">
+              <input
+                type="number"
+                min="1"
+                value={f.quantity}
+                onChange={(e) =>
+                  setF({ ...f, quantity: Number(e.target.value) })
+                }
+              />
+            </Field>
+            <Field label="Kondisi">
+              <select
+                value={f.condition_status}
+                onChange={(e) =>
+                  setF({ ...f, condition_status: e.target.value })
+                }
+              >
+                <option value="baik">Baik</option>
+                <option value="rusak">Rusak</option>
+                <option value="perbaikan">Perbaikan</option>
+              </select>
+            </Field>
+            <Field label="Lokasi">
+              <input
+                value={f.location}
+                onChange={(e) => setF({ ...f, location: e.target.value })}
+              />
+            </Field>
+            <Field label="Catatan" wide>
+              <textarea
+                value={f.notes}
+                onChange={(e) => setF({ ...f, notes: e.target.value })}
+              />
+            </Field>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setShow(false)}
+              >
+                Batal
+              </button>
+              <button className="primary">
+                {editing ? "Simpan Perubahan" : "Simpan Aset"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </section>
+  );
 }
-function LoginPage({onLogin,brand}){
- const [setup,setSetup]=useState(false),[f,setF]=useState({name:'Super Admin',username:'admin',password:''}),[error,setError]=useState('');
- useEffect(()=>{api('/auth/bootstrap').then(r=>setSetup(r.needsSetup)).catch(e=>setError(e.message))},[]);
- async function submit(e){e.preventDefault();setError('');try{const r=await api(setup?'/auth/bootstrap':'/auth/login',{method:'POST',body:JSON.stringify(f)});onLogin(r)}catch(e){setError(e.message)}}
- return <div className="login-shell"><section className="panel login-panel"><div className="brand login-brand"><div className="brand-icon"><Wifi size={22}/></div><div><b>{brand||'BillingNet'}</b><small>ISP Management</small></div></div><h2>{setup?'Buat Superadmin Pertama':'Masuk ke aplikasi'}</h2><p>{setup?'Setup awal hanya tersedia jika belum ada user. Password minimal 8 karakter.':'Gunakan akun yang telah dibuat admin.'}</p>{error&&<div className="alert error">{error}</div>}<form className="form-grid" onSubmit={submit}>{setup&&<Field label="Nama"><input required value={f.name} onChange={e=>setF({...f,name:e.target.value})}/></Field>}<Field label="Username"><input required autoComplete="username" value={f.username} onChange={e=>setF({...f,username:e.target.value})}/></Field><Field label="Password"><input type="password" required autoComplete={setup?'new-password':'current-password'} value={f.password} onChange={e=>setF({...f,password:e.target.value})}/></Field><div className="form-actions"><button className="primary">{setup?'Buat akun superadmin':'Login'}</button></div></form></section></div>
+function UsersPage({ rows, currentUser, onSaved, onError }) {
+  const [show, setShow] = useState(false),
+    [editing, setEditing] = useState(null),
+    [f, setF] = useState({
+      name: "",
+      username: "",
+      password: "",
+      role: "kolektor",
+      active: true,
+    });
+  function openNew() {
+    setEditing(null);
+    setF({
+      name: "",
+      username: "",
+      password: "",
+      role: "kolektor",
+      active: true,
+    });
+    setShow(true);
+  }
+  function openEdit(u) {
+    setEditing(u);
+    setF({
+      name: u.name,
+      username: u.username,
+      password: "",
+      role: u.role,
+      active: Boolean(u.active),
+    });
+    setShow(true);
+  }
+  async function submit(e) {
+    e.preventDefault();
+    try {
+      if (editing)
+        await api(`/users/${editing.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ role: f.role, active: f.active }),
+        });
+      else await api("/users", { method: "POST", body: JSON.stringify(f) });
+      setShow(false);
+      setEditing(null);
+      await onSaved();
+    } catch (e) {
+      onError(e.message);
+    }
+  }
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>Manajemen User</h3>
+          <p>Buat akun dan tentukan hak akses aplikasi.</p>
+        </div>
+        <button className="primary" onClick={openNew}>
+          <Plus size={16} /> Tambah User
+        </button>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Nama</th>
+              <th>Username</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((u) => (
+              <tr key={u.id}>
+                <td>
+                  <b>{u.name}</b>
+                  {u.id === currentUser.id && <small>Akun Anda</small>}
+                </td>
+                <td>{u.username}</td>
+                <td>{u.role}</td>
+                <td>{u.active ? "Aktif" : "Nonaktif"}</td>
+                <td>
+                  <button
+                    className="small-btn"
+                    disabled={
+                      u.id === currentUser.id ||
+                      (currentUser.role === "admin" && u.role === "superadmin")
+                    }
+                    onClick={() => openEdit(u)}
+                  >
+                    Edit akses
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {show && (
+        <Modal
+          title={editing ? "Edit Akses User" : "Tambah User"}
+          onClose={() => setShow(false)}
+        >
+          <form className="form-grid modal-form" onSubmit={submit}>
+            {!editing && (
+              <>
+                <Field label="Nama">
+                  <input
+                    required
+                    value={f.name}
+                    onChange={(e) => setF({ ...f, name: e.target.value })}
+                  />
+                </Field>
+                <Field label="Username">
+                  <input
+                    required
+                    autoComplete="off"
+                    value={f.username}
+                    onChange={(e) => setF({ ...f, username: e.target.value })}
+                  />
+                </Field>
+                <Field label="Password awal (min. 8 karakter)">
+                  <input
+                    required
+                    minLength="8"
+                    type="password"
+                    value={f.password}
+                    onChange={(e) => setF({ ...f, password: e.target.value })}
+                  />
+                </Field>
+              </>
+            )}
+            <Field label="Role">
+              <select
+                value={f.role}
+                onChange={(e) => setF({ ...f, role: e.target.value })}
+              >
+                <option value="admin">Admin</option>
+                <option value="kolektor">Kolektor</option>
+                {currentUser.role === "superadmin" && (
+                  <option value="superadmin">Superadmin</option>
+                )}
+              </select>
+            </Field>
+            {editing && (
+              <Field label="Status akun">
+                <select
+                  value={String(f.active)}
+                  onChange={(e) =>
+                    setF({ ...f, active: e.target.value === "true" })
+                  }
+                >
+                  <option value="true">Aktif</option>
+                  <option value="false">Nonaktif</option>
+                </select>
+              </Field>
+            )}
+            <div className="form-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setShow(false)}
+              >
+                Batal
+              </button>
+              <button className="primary">
+                {editing ? "Simpan Perubahan" : "Buat User"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </section>
+  );
 }
-function Stat({title,value,note,icon:Icon,onClick,active}){const Tag=onClick?'button':'div';return <Tag type={onClick?'button':undefined} onClick={onClick} className={'stat-card '+(onClick?'stat-card-clickable ':'')+(active?'stat-card-selected':'')}><div className="stat-top"><span>{title}</span><div className="stat-icon"><Icon size={19}/></div></div><strong>{value}</strong><small>{note}</small></Tag>}
-function InvoiceTable({rows,onPay,onDelete,onNunggak}){const manage=Boolean(onDelete||onNunggak);return <div className="table-wrap"><table><thead><tr><th>No. Tagihan</th><th>Pelanggan</th><th>Jatuh Tempo</th><th>Total</th><th>Status</th>{manage&&<th>NUNGGAK bulan ini</th>}<th>Aksi</th></tr></thead><tbody>{rows.map(i=><tr key={i.id}><td><b>{i.invoice_number}</b></td><td>{i.customer_name}<small>{i.customer_code}</small></td><td>{String(i.due_date).slice(0,10)}</td><td><b>{money(i.amount)}</b><small>Sisa {money(i.amount-i.paid_amount)}</small></td><td><span className={'pill '+(i.status==='paid'?'green':i.status==='partial'?'yellow':i.status==='void'?'':'red')}>{i.status==='paid'?'Lunas':i.status==='partial'?'Sebagian':i.status==='void'?'Batal':'Belum lunas'}</span></td>{manage&&<td>{i.status==='void'?'—':<button className={'small-btn '+(i.skip_isolation?'':'secondary')} disabled={!onNunggak||i.status==='paid'} onClick={()=>onNunggak?.(i)}>{i.skip_isolation?'NUNGGAK aktif':'NUNGGAK'}</button>}</td>}<td>{i.status!=='paid'&&i.status!=='void'?<button className="small-btn" onClick={()=>onPay(i)}>Bayar</button>:null}{onDelete&&<> <button className="small-btn danger-btn" onClick={()=>onDelete(i)}><Trash2 size={13}/> Hapus</button></>}</td></tr>)}{rows.length===0&&<tr><td colSpan={manage?7:6} className="empty-cell">Belum ada tagihan.</td></tr>}</tbody></table></div>}
-function CustomerForm({customer,packages,routers,users=[],canAssignCollector=true,globalInvoiceDay=1,onCancel,onSaved,onError}){
- const [f,setF]=useState(()=>customer?{...customer,package_id:String(customer.package_id||''),router_id:String(customer.router_id||''),billing_day:customer.billing_day||1,invoice_day_override:customer.invoice_day_override||'',payment_start_day_override:customer.payment_start_day_override??'',payment_end_day_override:customer.payment_end_day_override??'',grace_days_override:customer.grace_days_override??'',isolation_time_override:customer.isolation_time_override?String(customer.isolation_time_override).slice(0,5):'',collector_id:String(customer.collector_id||''),due_grace_days:customer.due_grace_days||0,active:customer.active===undefined?true:Boolean(customer.active),skip_mass_isolation:Boolean(customer.skip_mass_isolation)||customer.isolation_enabled===false,isolation_enabled:Boolean(customer.isolation_enabled),service_type:customer.service_type||'internet'}:{customer_code:'CUST-'+Date.now().toString().slice(-6),name:'',phone:'',address:'',package_id:'',router_id:'',pppoe_username:'',billing_day:1,invoice_day_override:'',payment_start_day_override:'',payment_end_day_override:'',grace_days_override:'',isolation_time_override:'',collector_id:'',due_grace_days:0,active:true,skip_mass_isolation:false,service_type:'internet',isolation_enabled:true,customer_status:'active',notes:''});
- const change=e=>{const {name,value,type,checked}=e.target;setF(prev=>{const next={...prev,[name]:type==='checkbox'?checked:value};if(name==='service_type'){next.package_id='';if(value==='tv_cable'){next.router_id='';next.pppoe_username='';}}if(name==='package_id'){const pkg=packages.find(p=>String(p.id)===value);if(pkg){next.service_type=pkg.service_type;if(pkg.service_type==='tv_cable'){next.router_id='';next.pppoe_username='';}else if(pkg.router_id)next.router_id=String(pkg.router_id);}}return next})};
- const servicePackages=packages.filter(p=>p.service_type===f.service_type||p.service_type==='bundle');
- async function submit(e){e.preventDefault();try{const payload={...f,package_id:f.package_id||null,router_id:f.service_type==='tv_cable'?null:(f.router_id||null),pppoe_username:f.service_type==='tv_cable'?null:(f.pppoe_username||null),billing_day:Number(f.billing_day),invoice_day_override:f.invoice_day_override?Number(f.invoice_day_override):null,payment_start_day_override:f.payment_start_day_override?Number(f.payment_start_day_override):null,payment_end_day_override:f.payment_end_day_override?Number(f.payment_end_day_override):null,grace_days_override:f.grace_days_override!==''?Number(f.grace_days_override):null,isolation_time_override:f.isolation_time_override||null,collector_id:f.collector_id?Number(f.collector_id):null,due_grace_days:Number(f.due_grace_days||0),active:Boolean(f.active),skip_mass_isolation:Boolean(f.skip_mass_isolation),isolation_enabled:!Boolean(f.skip_mass_isolation)};await api(customer?`/customers/${customer.id}`:'/customers',{method:customer?'PUT':'POST',body:JSON.stringify(payload)});onSaved()}catch(e){onError(e.message)}}
- return <div className="modal-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)onCancel()}}><section className="payment-modal form-modal"><div className="modal-head"><div><h3>{customer?'Edit Pelanggan':'Tambah Pelanggan'}</h3><p>Data pelanggan dan pengaturan layanan</p></div><button type="button" className="icon-btn" onClick={onCancel} aria-label="Tutup"><X size={17}/></button></div><form className="form-grid modal-form" onSubmit={submit}><Field label="Kode pelanggan"><input name="customer_code" value={f.customer_code||''} onChange={change} required disabled={Boolean(customer)}/></Field><Field label="Nama pelanggan"><input name="name" value={f.name||''} onChange={change} required/></Field><Field label="Nomor HP"><input name="phone" value={f.phone||''} onChange={change}/></Field><Field label="Jenis layanan"><select name="service_type" value={f.service_type} onChange={change}><option value="internet">Internet</option><option value="tv_cable">TV Kabel</option><option value="bundle">Bundle</option></select></Field><Field label="Paket"><select name="package_id" value={f.package_id} onChange={change}><option value="">Pilih paket</option>{servicePackages.map(p=><option key={p.id} value={p.id}>{p.name} — {money(p.price)}</option>)}</select></Field>{f.service_type!=='tv_cable'&&<><Field label="Router MikroTik"><select name="router_id" value={f.router_id} onChange={change} required={f.service_type!=='tv_cable'}><option value="">Pilih router</option>{routers.map(r=><option key={r.id} value={r.id}>{r.name} ({r.host})</option>)}</select></Field><Field label="Username PPPoE"><input name="pppoe_username" value={f.pppoe_username||''} onChange={change} placeholder="username PPPoE" required/></Field></>}{customer&&<Field label="Status pelanggan"><select name="customer_status" value={f.customer_status||'active'} onChange={change}><option value="active">Aktif</option><option value="suspended">Ditangguhkan</option><option value="terminated">Berhenti</option></select></Field>}<Field label="Tanggal generate invoice (1–31)"><input type="number" min="1" max="31" name="invoice_day_override" value={f.invoice_day_override} onChange={change} placeholder="Global"/><small className="helper-text">Kosong mengikuti pengaturan utama.</small></Field><Field label="Mulai masa pembayaran (tanggal)"><input type="number" min="1" max="31" name="payment_start_day_override" value={f.payment_start_day_override} onChange={change} placeholder="Global"/><small className="helper-text">Contoh: 1. Kosong mengikuti pengaturan utama.</small></Field><Field label="Akhir masa pembayaran (tanggal)"><input type="number" min="1" max="31" name="payment_end_day_override" value={f.payment_end_day_override} onChange={change} placeholder="Global"/><small className="helper-text">Contoh: 13. Jatuh tempo invoice.</small></Field><Field label="Masa tenggang / dispensasi (hari)"><input type="number" min="0" name="grace_days_override" value={f.grace_days_override} onChange={change} placeholder="Global"/><small className="helper-text">Kosong mengikuti pengaturan utama.</small></Field><Field label="Jam isolir khusus pelanggan"><input type="time" name="isolation_time_override" value={f.isolation_time_override} onChange={change}/><small className="helper-text">Kosong mengikuti jam isolir global.</small></Field>{canAssignCollector&&<Field label="Kolektor"><select name="collector_id" value={f.collector_id} onChange={change}><option value="">Belum ditugaskan</option>{users.filter(u=>u.role==='kolektor'&&u.active).map(u=><option key={u.id} value={u.id}>{u.name} ({u.username})</option>)}</select></Field>}<Field label="Alamat" wide><textarea name="address" value={f.address||''} onChange={change}/></Field><Field label="Catatan" wide><textarea name="notes" value={f.notes||''} onChange={change}/></Field><label className="check-field"><input type="checkbox" name="active" checked={Boolean(f.active)} onChange={change}/> Pelanggan aktif dan menerima invoice bulanan</label><label className="check-field"><input type="checkbox" name="skip_mass_isolation" checked={Boolean(f.skip_mass_isolation)} onChange={change}/> Lewati isolir massal untuk pelanggan ini</label><div className="form-actions"><button type="button" className="secondary" onClick={onCancel}>Batal</button><button className="primary">{customer?'Simpan Perubahan':'Simpan Pelanggan'}</button></div></form></section></div>
+function ProfilePage({ user, onSaved, onError }) {
+  const [show, setShow] = useState(false),
+    [f, setF] = useState({ name: user.name, password: "", confirm: "" });
+  async function submit(e) {
+    e.preventDefault();
+    if (f.password && f.password !== f.confirm)
+      return onError("Konfirmasi password tidak sama.");
+    try {
+      await api("/profile", {
+        method: "PUT",
+        body: JSON.stringify({ name: f.name, password: f.password }),
+      });
+      setShow(false);
+      setF({ ...f, password: "", confirm: "" });
+      await onSaved();
+    } catch (e) {
+      onError(e.message);
+    }
+  }
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>Profile Saya</h3>
+          <p>Ubah nama tampilan dan password akun sendiri.</p>
+        </div>
+        <button className="primary" onClick={() => setShow(true)}>
+          Edit Profile
+        </button>
+      </div>
+      <div className="profile-summary">
+        <p>
+          <b>Nama:</b> {user.name}
+        </p>
+        <p>
+          <b>Username:</b> {user.username}
+        </p>
+        <p>
+          <b>Role:</b> {user.role}
+        </p>
+      </div>
+      {show && (
+        <Modal
+          title="Edit Profile"
+          subtitle="Kosongkan password jika tidak ingin mengubahnya."
+          onClose={() => setShow(false)}
+        >
+          <form className="form-grid modal-form" onSubmit={submit}>
+            <Field label="Nama tampilan">
+              <input
+                required
+                value={f.name}
+                onChange={(e) => setF({ ...f, name: e.target.value })}
+              />
+            </Field>
+            <Field label="Username">
+              <input value={user.username} disabled />
+            </Field>
+            <Field label="Role">
+              <input value={user.role} disabled />
+            </Field>
+            <Field label="Password baru (opsional, min. 8 karakter)">
+              <input
+                type="password"
+                minLength="8"
+                value={f.password}
+                onChange={(e) => setF({ ...f, password: e.target.value })}
+              />
+            </Field>
+            <Field label="Konfirmasi password baru">
+              <input
+                type="password"
+                value={f.confirm}
+                onChange={(e) => setF({ ...f, confirm: e.target.value })}
+              />
+            </Field>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setShow(false)}
+              >
+                Batal
+              </button>
+              <button className="primary">Simpan Profile</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </section>
+  );
 }
-function PackagePage({packages,routers,onSaved,onError}){
- const blank={name:'',service_type:'internet',price:'',ppp_profile:'',router_id:'',active:true};const [f,setF]=useState(blank);const [editing,setEditing]=useState(null);const [modalOpen,setModalOpen]=useState(false);const [profiles,setProfiles]=useState([]);const [profileLoading,setProfileLoading]=useState(false);const [packageSearch,setPackageSearch]=useState('');
- useEffect(()=>{let cancelled=false;async function fetchProfiles(){if(f.service_type==='tv_cable'||!f.router_id){setProfiles([]);return}setProfileLoading(true);try{const result=await api(`/routers/${f.router_id}/ppp-profiles`);if(!cancelled)setProfiles(result.profiles||[])}catch(e){if(!cancelled){setProfiles([]);onError('Gagal mengambil PPP Profile dari MikroTik: '+e.message)}}finally{if(!cancelled)setProfileLoading(false)}}fetchProfiles();return()=>{cancelled=true}},[f.router_id,f.service_type]);
- function openNew(){setEditing(null);setF({...blank});setModalOpen(true)}function openEdit(p){setEditing(p.id);setF({name:p.name,service_type:p.service_type,price:String(p.price),ppp_profile:p.ppp_profile||'',router_id:String(p.router_id||''),active:Boolean(p.active)});setModalOpen(true)}
- const change=e=>{const {name,value,type,checked}=e.target;setF(prev=>{const next={...prev,[name]:type==='checkbox'?checked:value};if(name==='service_type'&&value==='tv_cable'){next.router_id='';next.ppp_profile=''}if(name==='router_id')next.ppp_profile='';return next})};
- async function submit(e){e.preventDefault();try{await api(editing?`/packages/${editing}`:'/packages',{method:editing?'PUT':'POST',body:JSON.stringify({...f,price:Number(f.price),router_id:f.service_type==='tv_cable'?null:(f.router_id?Number(f.router_id):null),ppp_profile:f.service_type==='tv_cable'?null:(f.ppp_profile||null)})});setModalOpen(false);onSaved()}catch(e){onError(e.message)}}
- return <section className="panel"><div className="panel-head"><div><h3>Paket Layanan</h3><p>Kelola paket internet, TV kabel, dan bundling.</p></div><button className="primary" onClick={openNew}><Plus size={17}/> Tambah Paket</button></div><div className="toolbar"><div className="search"><Search size={17}/><input placeholder="Cari nama paket, layanan, router, profile..." value={packageSearch} onChange={e=>setPackageSearch(e.target.value)}/></div></div><div className="table-wrap"><table><thead><tr><th>Nama paket</th><th>Layanan</th><th>Harga</th><th>Router MikroTik</th><th>PPP Profile</th><th>Status</th><th>Aksi</th></tr></thead><tbody>{packages.filter(p=>`${p.name} ${p.service_type} ${p.router_name||''} ${p.ppp_profile||''}`.toLowerCase().includes(packageSearch.toLowerCase())).map(p=><tr key={p.id}><td><b>{p.name}</b></td><td>{({internet:'Internet',tv_cable:'TV Kabel',bundle:'Bundle'})[p.service_type]||p.service_type}</td><td>{money(p.price)}</td><td>{p.service_type==='tv_cable'?'Tidak menggunakan MikroTik':p.router_name||'Router belum dipilih'}</td><td>{p.ppp_profile||'—'}</td><td><span className={'pill '+(p.active?'green':'red')}>{p.active?'Aktif':'Nonaktif'}</span></td><td><button className="small-btn" onClick={()=>openEdit(p)}>Edit</button> <button className="small-btn danger-btn" onClick={async()=>{if(!window.confirm(`Hapus paket ${p.name}? Pelanggan dan tagihan lama akan tetap ada tanpa tautan paket.`))return;try{await api(`/packages/${p.id}`,{method:'DELETE'});onSaved()}catch(e){onError(e.message)}}}><Trash2 size={13}/> Hapus</button></td></tr>)}{packages.length===0&&<tr><td colSpan="7" className="empty-cell">Belum ada paket layanan.</td></tr>}</tbody></table></div>
- {modalOpen&&<div className="modal-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setModalOpen(false)}}><section className="payment-modal form-modal"><div className="modal-head"><div><h3>{editing?'Edit Paket':'Tambah Paket'}</h3><p>PPP Profile diambil langsung dari router yang dipilih.</p></div><button type="button" className="icon-btn" onClick={()=>setModalOpen(false)} aria-label="Tutup"><X size={17}/></button></div><form className="form-grid modal-form" onSubmit={submit}><Field label="Nama paket"><input required value={f.name} name="name" onChange={change}/></Field><Field label="Jenis layanan"><select name="service_type" value={f.service_type} onChange={change}><option value="internet">Internet</option><option value="tv_cable">TV Kabel</option><option value="bundle">Bundle</option></select></Field><Field label="Harga bulanan (Rp)"><input required type="number" min="0" value={f.price} name="price" onChange={change}/></Field>{f.service_type!=='tv_cable'&&<><Field label="Router MikroTik"><select required name="router_id" value={f.router_id} onChange={change}><option value="">Pilih router</option>{routers.map(r=><option key={r.id} value={r.id}>{r.name} ({r.host})</option>)}</select></Field><Field label="Nama PPP Profile"><select required name="ppp_profile" value={f.ppp_profile} onChange={change} disabled={!f.router_id||profileLoading}><option value="">{!f.router_id?'Pilih router terlebih dahulu':profileLoading?'Mengambil profil…':'Pilih PPP Profile'}</option>{profiles.map(profile=><option key={profile} value={profile}>{profile}</option>)}</select>{f.router_id&&profiles.length===0&&!profileLoading&&<small className="helper-text">Tidak ada profil terbaca. Pastikan koneksi API dan izin PPP.</small>}</Field></>}{f.service_type==='tv_cable'&&<div className="info-note field wide">Paket TV Kabel tidak memerlukan pilihan MikroTik atau PPP Profile.</div>}<label className="check-field"><input type="checkbox" name="active" checked={Boolean(f.active)} onChange={change}/> Paket aktif dan dapat dipilih</label><div className="form-actions"><button type="button" className="secondary" onClick={()=>setModalOpen(false)}>Batal</button><button className="primary">{editing?'Simpan Perubahan':'Tambah Paket'}</button></div></form></section></div>}</section>
+function BrandSettings({ brand, onSaved, onError }) {
+  const [name, setName] = useState(brand),
+    [show, setShow] = useState(false);
+  useEffect(() => setName(brand), [brand]);
+  async function submit(e) {
+    e.preventDefault();
+    try {
+      await api("/brand", {
+        method: "PUT",
+        body: JSON.stringify({ brand_name: name }),
+      });
+      setShow(false);
+      await onSaved();
+    } catch (e) {
+      onError(e.message);
+    }
+  }
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>Identitas Aplikasi</h3>
+          <p>Nama brand yang tampil pada sidebar aplikasi.</p>
+          <p>
+            <b>Brand saat ini:</b> {brand}
+          </p>
+        </div>
+        <button className="primary" onClick={() => setShow(true)}>
+          Ubah Nama Brand
+        </button>
+      </div>
+      {show && (
+        <Modal title="Ubah Nama Brand" onClose={() => setShow(false)}>
+          <form className="form-grid modal-form" onSubmit={submit}>
+            <Field label="Nama brand">
+              <input
+                required
+                maxLength="120"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </Field>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setShow(false)}
+              >
+                Batal
+              </button>
+              <button className="primary">Simpan Nama Brand</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </section>
+  );
 }
-function RouterPage({routers,onSaved,onError}){
- const empty={name:'',host:'',port:8728,username:'billing-api',password:'',isolation_profile:'KV-ISOLIR'};
- const [f,setF]=useState(empty),[show,setShow]=useState(false),[editing,setEditing]=useState(null),[testing,setTesting]=useState(null),[saving,setSaving]=useState(false);
- function openNew(){setEditing(null);setF({...empty});setShow(true)}
- function openEdit(r){setEditing(r.id);setF({name:r.name,host:r.host,port:r.port,username:r.username,password:'',isolation_profile:r.isolation_profile||'KV-ISOLIR'});setShow(true)}
- async function submit(e){e.preventDefault();setSaving(true);try{await api(editing?`/routers/${editing}`:'/routers',{method:editing?'PUT':'POST',body:JSON.stringify(f)});setShow(false);setF({...empty});setEditing(null);onSaved()}catch(e){onError(e.message)}finally{setSaving(false)}}
- async function removeRouter(r){if(!window.confirm(`Hapus router ${r.name}? Router yang masih dipakai pelanggan atau paket tidak dapat dihapus.`))return;try{await api(`/routers/${r.id}`,{method:'DELETE'});onSaved()}catch(e){onError(e.message)}}
- async function test(id){setTesting(id);try{const r=await api(`/routers/${id}/test`,{method:'POST'});alert(`Berhasil terhubung ke ${r.identity}`)}catch(e){onError(e.message)}finally{setTesting(null)}}
- async function validateProfile(id){setTesting(id);try{const result=await api(`/routers/${id}/use-kv-isolir`,{method:'POST'});onSaved();alert(result.message)}catch(e){onError(e.message)}finally{setTesting(null)}}
- return <section className="panel"><div className="panel-head"><div><h3>Router MikroTik</h3><p>Konfigurasi koneksi RouterOS API</p></div><button className="primary" onClick={openNew}><Plus size={16}/> Tambah Router</button></div><div className="info-note">Buat user API khusus dengan hak minimum yang diperlukan. Batasi akses API hanya dari IP server billing atau jaringan VPN. Jangan buka port API ke internet publik.</div><div className="table-wrap"><table><thead><tr><th>Router</th><th>Host</th><th>Profil isolir</th><th>Status terakhir</th><th>Aksi</th></tr></thead><tbody>{routers.map(r=><tr key={r.id}><td><b>{r.name}</b></td><td>{r.host}:{r.port}</td><td>{r.isolation_profile}</td><td><span className={'pill '+(r.last_status==='online'?'green':'yellow')}>{r.last_status}</span></td><td><button className="small-btn" onClick={()=>openEdit(r)}>Edit</button> <button className="small-btn" disabled={testing===r.id} onClick={()=>test(r.id)}>{testing===r.id?'Memproses…':'Test koneksi'}</button> <button className="small-btn" disabled={testing===r.id} onClick={()=>validateProfile(r.id)}>Validasi KV-ISOLIR</button> <button className="small-btn danger-btn" disabled={testing===r.id} onClick={()=>removeRouter(r)}><Trash2 size={13}/> Hapus</button></td></tr>)}{routers.length===0&&<tr><td colSpan="5" className="empty-cell">Belum ada router MikroTik.</td></tr>}</tbody></table></div>
- {show&&<Modal title={editing?'Edit Router MikroTik':'Tambah Router MikroTik'} onClose={()=>{setShow(false);setEditing(null)}}><form className="form-grid modal-form" onSubmit={submit}><Field label="Nama router"><input required value={f.name} onChange={e=>setF({...f,name:e.target.value})}/></Field><Field label="IP / Host"><input required placeholder="10.10.10.1" value={f.host} onChange={e=>setF({...f,host:e.target.value})}/></Field><Field label="Port API"><input required type="number" min="1" max="65535" value={f.port} onChange={e=>setF({...f,port:Number(e.target.value)})}/></Field><Field label="Username API"><input required value={f.username} onChange={e=>setF({...f,username:e.target.value})}/></Field><Field label={editing?'Password API (kosongkan jika tidak diubah)':'Password API'}><input required={!editing} type="password" autoComplete="new-password" placeholder={editing?'Biarkan kosong untuk mempertahankan password':'Password API router'} value={f.password} onChange={e=>setF({...f,password:e.target.value})}/></Field><Field label="Profil isolir"><input value="KV-ISOLIR" readOnly/></Field><div className="form-actions"><button type="button" className="secondary" onClick={()=>{setShow(false);setEditing(null)}}>Batal</button><button className="primary" disabled={saving}>{saving?'Menyimpan…':editing?'Simpan Perubahan':'Simpan Router'}</button></div></form></Modal>}
- </section>
+function LoginPage({ onLogin, brand }) {
+  const [setup, setSetup] = useState(false),
+    [f, setF] = useState({
+      name: "Super Admin",
+      username: "admin",
+      password: "",
+    }),
+    [error, setError] = useState("");
+  useEffect(() => {
+    api("/auth/bootstrap")
+      .then((r) => setSetup(r.needsSetup))
+      .catch((e) => setError(e.message));
+  }, []);
+  async function submit(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const r = await api(setup ? "/auth/bootstrap" : "/auth/login", {
+        method: "POST",
+        body: JSON.stringify(f),
+      });
+      onLogin(r);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+  return (
+    <div className="login-shell">
+      <section className="panel login-panel">
+        <div className="brand login-brand">
+          <div className="brand-icon">
+            <Wifi size={22} />
+          </div>
+          <div>
+            <b>{brand || "BillingNet"}</b>
+            <small>ISP Management</small>
+          </div>
+        </div>
+        <h2>{setup ? "Buat Superadmin Pertama" : "Masuk ke aplikasi"}</h2>
+        <p>
+          {setup
+            ? "Setup awal hanya tersedia jika belum ada user. Password minimal 8 karakter."
+            : "Gunakan akun yang telah dibuat admin."}
+        </p>
+        {error && <div className="alert error">{error}</div>}
+        <form className="form-grid" onSubmit={submit}>
+          {setup && (
+            <Field label="Nama">
+              <input
+                required
+                value={f.name}
+                onChange={(e) => setF({ ...f, name: e.target.value })}
+              />
+            </Field>
+          )}
+          <Field label="Username">
+            <input
+              required
+              autoComplete="username"
+              value={f.username}
+              onChange={(e) => setF({ ...f, username: e.target.value })}
+            />
+          </Field>
+          <Field label="Password">
+            <input
+              type="password"
+              required
+              autoComplete={setup ? "new-password" : "current-password"}
+              value={f.password}
+              onChange={(e) => setF({ ...f, password: e.target.value })}
+            />
+          </Field>
+          <div className="form-actions">
+            <button className="primary">
+              {setup ? "Buat akun superadmin" : "Login"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
 }
-function SettingsPage({onSaved,onError}){
- const [f,setF]=useState({invoice_generation_day:1,payment_start_day:1,payment_end_day:13,grace_days:2,isolation_day_offset:0,isolation_time:'00:01:00',auto_reactivate:true}),[show,setShow]=useState(false);
- useEffect(()=>{api('/settings/billing').then(d=>setF({...d,auto_reactivate:Boolean(d.auto_reactivate)})).catch(e=>onError(e.message))},[]);
- async function submit(e){e.preventDefault();try{await api('/settings/billing',{method:'PUT',body:JSON.stringify(f)});setShow(false);onSaved()}catch(e){onError(e.message)}}
- return <section className="panel"><div className="panel-head"><div><h3>Pengaturan Billing</h3><p>Atur pembuatan tagihan dan isolir otomatis.</p></div><button className="primary" onClick={()=>setShow(true)}>Ubah Pengaturan</button></div><div className="info-note">Invoice dibuat tanggal {f.invoice_generation_day}. Masa pembayaran tanggal {f.payment_start_day}–{f.payment_end_day}. Dispensasi {f.grace_days} hari; isolir massal berjalan tanggal {Math.min(31,Number(f.payment_end_day||13)+Number(f.grace_days||2)+1+Number(f.isolation_day_offset||0))} pukul {f.isolation_time}. Pelanggan dengan opsi Lewati isolir massal tidak akan diisolir. Aktivasi kembali otomatis: {f.auto_reactivate?'Aktif':'Nonaktif'}.</div><div className="info-note">Sebelum produksi, uji pada satu akun pelanggan. Pastikan profile KV-ISOLIR tersedia di setiap MikroTik.</div>
- {show&&<Modal title="Pengaturan Billing" onClose={()=>setShow(false)}><form className="form-grid modal-form" onSubmit={submit}><Field label="Tanggal generate invoice"><input type="number" min="1" max="31" value={f.invoice_generation_day} onChange={e=>setF({...f,invoice_generation_day:Number(e.target.value)})}/></Field><Field label="Awal masa pembayaran"><input type="number" min="1" max="31" value={f.payment_start_day} onChange={e=>setF({...f,payment_start_day:Number(e.target.value)})}/></Field><Field label="Akhir masa pembayaran / jatuh tempo"><input type="number" min="1" max="31" value={f.payment_end_day} onChange={e=>setF({...f,payment_end_day:Number(e.target.value)})}/></Field><Field label="Masa tenggang / dispensasi (hari)"><input type="number" min="0" value={f.grace_days} onChange={e=>setF({...f,grace_days:Number(e.target.value)})}/></Field><Field label="Tambahan hari sebelum isolir"><input type="number" min="0" value={f.isolation_day_offset} onChange={e=>setF({...f,isolation_day_offset:Number(e.target.value)})}/></Field><Field label="Jam isolir massal"><input type="time" value={f.isolation_time} onChange={e=>setF({...f,isolation_time:e.target.value})}/></Field><Field label="Aktivasi kembali otomatis"><select value={String(f.auto_reactivate)} onChange={e=>setF({...f,auto_reactivate:e.target.value==='true'})}><option value="true">Aktif</option><option value="false">Nonaktif</option></select></Field><div className="form-actions"><button type="button" className="secondary" onClick={()=>setShow(false)}>Batal</button><button className="primary">Simpan Pengaturan</button></div></form></Modal>}
- </section>
+function Stat({ title, value, note, icon: Icon, onClick, active }) {
+  const Tag = onClick ? "button" : "div";
+  return (
+    <Tag
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      className={
+        "stat-card " +
+        (onClick ? "stat-card-clickable " : "") +
+        (active ? "stat-card-selected" : "")
+      }
+    >
+      <div className="stat-top">
+        <span>{title}</span>
+        <div className="stat-icon">
+          <Icon size={19} />
+        </div>
+      </div>
+      <strong>{value}</strong>
+      <small>{note}</small>
+    </Tag>
+  );
 }
-function PaymentModal({invoice,accounts,onClose,onSubmit}){
- const [f,setF]=useState({amount:String(Number(invoice.amount)-Number(invoice.paid_amount)),method:'cash',account_id:'',reference_number:'',notes:''});
- const [saving,setSaving]=useState(false); const change=e=>setF({...f,[e.target.name]:e.target.value});
- async function submit(e){e.preventDefault();if(f.method==='transfer'&&!f.account_id)return alert('Pilih rekening tujuan transfer.');setSaving(true);try{await onSubmit({invoice_id:invoice.id,amount:Number(f.amount),method:f.method,account_id:f.method==='transfer'?Number(f.account_id):null,reference_number:f.reference_number,notes:f.notes})}finally{setSaving(false)}}
- return <div className="modal-backdrop" role="presentation"><section className="payment-modal"><div className="modal-head"><div><h3>Catat Pembayaran</h3><p>{invoice.invoice_number} · {invoice.customer_name}</p></div><button type="button" className="icon-btn" onClick={onClose} aria-label="Tutup"><X size={17}/></button></div><div className="payment-due"><span>Sisa tagihan</span><b>{money(Number(invoice.amount)-Number(invoice.paid_amount))}</b></div><form className="form-grid modal-form" onSubmit={submit}><Field label="Nominal pembayaran (Rp)"><input type="number" min="1" max={Number(invoice.amount)-Number(invoice.paid_amount)} required value={f.amount} onChange={change} name="amount"/></Field><Field label="Metode pembayaran"><select name="method" value={f.method} onChange={change}><option value="cash">Cash / Tunai</option><option value="transfer">Transfer bank</option></select></Field>{f.method==='transfer'&&<><Field label="Rekening tujuan" wide><select name="account_id" value={f.account_id} onChange={change} required><option value="">Pilih rekening</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.bank_name} — {a.account_number} (a.n. {a.account_name})</option>)}</select>{accounts.length===0&&<small className="helper-text">Belum ada rekening aktif. Tambahkan melalui menu Rekening terlebih dahulu.</small>}</Field><Field label="Nomor referensi / bukti transfer"><input name="reference_number" value={f.reference_number} onChange={change} placeholder="Opsional"/></Field></>}<Field label="Catatan" wide><textarea name="notes" value={f.notes} onChange={change} placeholder="Catatan pembayaran (opsional)"/></Field><div className="form-actions"><button type="button" className="secondary" onClick={onClose}>Batal</button><button className="primary" disabled={saving}>{saving?'Menyimpan…':'Simpan Pembayaran'}</button></div></form></section></div>
+function InvoiceTable({ rows, onPay, onDelete, onNunggak }) {
+  const manage = Boolean(onDelete || onNunggak);
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>No. Tagihan</th>
+            <th>Pelanggan</th>
+            <th>Jatuh Tempo</th>
+            <th>Total</th>
+            <th>Status</th>
+            {manage && <th>NUNGGAK bulan ini</th>}
+            <th>Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((i) => (
+            <tr key={i.id}>
+              <td>
+                <b>{i.invoice_number}</b>
+              </td>
+              <td>
+                {i.customer_name}
+                <small>{i.customer_code}</small>
+              </td>
+              <td>{String(i.due_date).slice(0, 10)}</td>
+              <td>
+                <b>{money(i.amount)}</b>
+                <small>Sisa {money(i.amount - i.paid_amount)}</small>
+              </td>
+              <td>
+                <span
+                  className={
+                    "pill " +
+                    (i.status === "paid"
+                      ? "green"
+                      : i.status === "partial"
+                        ? "yellow"
+                        : i.status === "void"
+                          ? ""
+                          : "red")
+                  }
+                >
+                  {i.status === "paid"
+                    ? "Lunas"
+                    : i.status === "partial"
+                      ? "Sebagian"
+                      : i.status === "void"
+                        ? "Batal"
+                        : "Belum lunas"}
+                </span>
+              </td>
+              {manage && (
+                <td>
+                  {i.status === "void" ? (
+                    "—"
+                  ) : (
+                    <button
+                      className={
+                        "small-btn " + (i.skip_isolation ? "" : "secondary")
+                      }
+                      disabled={!onNunggak || i.status === "paid"}
+                      onClick={() => onNunggak?.(i)}
+                    >
+                      {i.skip_isolation ? "NUNGGAK aktif" : "NUNGGAK"}
+                    </button>
+                  )}
+                </td>
+              )}
+              <td>
+                {i.status !== "paid" && i.status !== "void" ? (
+                  <button className="small-btn" onClick={() => onPay(i)}>
+                    Bayar
+                  </button>
+                ) : null}
+                {onDelete && (
+                  <>
+                    {" "}
+                    <button
+                      className="small-btn danger-btn"
+                      onClick={() => onDelete(i)}
+                    >
+                      <Trash2 size={13} /> Hapus
+                    </button>
+                  </>
+                )}
+              </td>
+            </tr>
+          ))}
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={manage ? 7 : 6} className="empty-cell">
+                Belum ada tagihan.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
 }
-function BankAccountsPage({accounts,onSaved,onError}){
- const empty={bank_name:'',account_name:'',account_number:'',branch:'',notes:'',is_active:true};const [f,setF]=useState(empty);const [editing,setEditing]=useState(null),[show,setShow]=useState(false);
- const change=e=>setF({...f,[e.target.name]:e.target.type==='checkbox'?e.target.checked:e.target.value});
- function edit(a){setEditing(a.id);setF({bank_name:a.bank_name,account_name:a.account_name,account_number:a.account_number,branch:a.branch||'',notes:a.notes||'',is_active:Boolean(a.is_active)});setShow(true)}
- function open(){setEditing(null);setF(empty);setShow(true)}
- async function submit(e){e.preventDefault();try{await api(editing?`/bank-accounts/${editing}`:'/bank-accounts',{method:editing?'PUT':'POST',body:JSON.stringify(f)});setShow(false);setEditing(null);onSaved()}catch(e){onError(e.message)}}
- return <section className="panel"><div className="panel-head"><div><h3>Manajemen Rekening</h3><p>Kelola rekening tujuan untuk menerima pembayaran transfer.</p></div><button className="primary" onClick={open}><Plus size={16}/> Tambah Rekening</button></div><div className="table-wrap"><table><thead><tr><th>Bank</th><th>Nomor rekening</th><th>Nama pemilik</th><th>Cabang</th><th>Status</th><th>Aksi</th></tr></thead><tbody>{accounts.map(a=><tr key={a.id}><td><b>{a.bank_name}</b></td><td>{a.account_number}</td><td>{a.account_name}</td><td>{a.branch||'—'}</td><td><span className={'pill '+(a.is_active?'green':'red')}>{a.is_active?'Aktif':'Nonaktif'}</span></td><td><button className="small-btn" onClick={()=>edit(a)}>Edit</button></td></tr>)}</tbody></table></div><div className="info-note">Rekening nonaktif tetap tersimpan untuk riwayat transaksi, tetapi tidak muncul sebagai pilihan rekening tujuan pada pembayaran baru.</div>
- {show&&<Modal title={editing?'Edit Rekening':'Tambah Rekening'} onClose={()=>setShow(false)}><form className="form-grid modal-form" onSubmit={submit}><Field label="Nama bank"><input name="bank_name" value={f.bank_name} onChange={change} required/></Field><Field label="Nama pemilik rekening"><input name="account_name" value={f.account_name} onChange={change} required/></Field><Field label="Nomor rekening"><input name="account_number" value={f.account_number} onChange={change} required/></Field><Field label="Cabang"><input name="branch" value={f.branch} onChange={change}/></Field><Field label="Catatan"><input name="notes" value={f.notes} onChange={change}/></Field><label className="check-field"><input type="checkbox" name="is_active" checked={f.is_active} onChange={change}/> Rekening aktif dan dapat dipilih saat pembayaran</label><div className="form-actions"><button type="button" className="secondary" onClick={()=>setShow(false)}>Batal</button><button className="primary">{editing?'Simpan Perubahan':'Tambah Rekening'}</button></div></form></Modal>}
- </section>
+function CustomerDetailPage({ loading, data, live, onPay }) {
+  const c = data?.customer;
+  const p = data?.last_payment;
+  return loading || !c ? (
+    <div className="detail-loading">Memuat detail pelanggan…</div>
+  ) : (
+    <div className="customer-detail-body">
+      <div className="detail-grid">
+        <div>
+          <small>Nama pelanggan</small>
+          <b>{c.name}</b>
+        </div>
+        <div>
+          <small>Kode pelanggan</small>
+          <b>{c.customer_code}</b>
+        </div>
+        <div>
+          <small>Nomor HP</small>
+          <b>{c.phone || "—"}</b>
+        </div>
+        <div>
+          <small>Jenis layanan</small>
+          <b>
+            {{ internet: "Internet", tv_cable: "TV Kabel", bundle: "Bundle" }[
+              c.service_type
+            ] || c.service_type}
+          </b>
+        </div>
+        <div>
+          <small>Paket</small>
+          <b>{c.package_name || "—"}</b>
+        </div>
+        <div>
+          <small>Alamat</small>
+          <b>{c.address || "—"}</b>
+        </div>
+        <div>
+          <small>Koordinat</small>
+          <b>
+            {c.latitude != null && c.longitude != null
+              ? `${c.latitude}, ${c.longitude}`
+              : "Belum diisi"}
+          </b>
+          {c.latitude != null && c.longitude != null && (
+            <a
+              target="_blank"
+              rel="noreferrer"
+              href={`https://www.google.com/maps?q=${c.latitude},${c.longitude}`}
+            >
+              Buka di Google Maps
+            </a>
+          )}
+        </div>
+        <div>
+          <small>Router MikroTik</small>
+          <b>{c.router_name || "—"}</b>
+        </div>
+        <div>
+          <small>Username PPPoE</small>
+          <b>{c.pppoe_username || "Belum terhubung"}</b>
+        </div>
+        <div>
+          <small>Status koneksi</small>
+          <b>
+            {c.service_type === "tv_cable"
+              ? "Tidak menggunakan MikroTik"
+              : !c.pppoe_username
+                ? "Belum terhubung"
+                : live?.status === "online"
+                  ? "Online"
+                  : "Offline"}
+          </b>
+        </div>
+        <div>
+          <small>IP Address MikroTik</small>
+          <b>{live?.ip || "—"}</b>
+        </div>
+        <div>
+          <small>Status isolir</small>
+          <b>
+            {c.isolation_status === "isolated"
+              ? "Terisolir"
+              : "Tidak terisolir"}
+          </b>
+        </div>
+      </div>
+      <section className="detail-section">
+        <h4>Pembayaran Terakhir</h4>
+        {p ? (
+          <div className="detail-payment">
+            <div>
+              <small>Tanggal pembayaran</small>
+              <b>{new Date(p.paid_at).toLocaleString("id-ID")}</b>
+            </div>
+            <div>
+              <small>Nominal</small>
+              <b>{money(p.amount)}</b>
+            </div>
+            <div>
+              <small>Metode</small>
+              <b>{p.method === "transfer" ? "Transfer" : "Tunai"}</b>
+            </div>
+            <div>
+              <small>Invoice</small>
+              <b>{p.invoice_number}</b>
+            </div>
+          </div>
+        ) : (
+          <p className="helper-text">Belum ada riwayat pembayaran.</p>
+        )}
+      </section>
+      <section className="detail-section">
+        <h4>Invoice Aktif / Belum Lunas</h4>
+        {data.active_invoices?.length ? (
+          <div className="detail-invoices">
+            {data.active_invoices.map((i) => (
+              <div key={i.id}>
+                <div>
+                  <b>{i.invoice_number}</b>
+                  <small>
+                    Jatuh tempo:{" "}
+                    {new Date(i.due_date).toLocaleDateString("id-ID")} ·{" "}
+                    {i.status === "partial" ? "Sebagian" : "Belum lunas"}
+                  </small>
+                </div>
+                <b>{money(Number(i.amount) - Number(i.paid_amount))}</b>
+                <button
+                  className="small-btn"
+                  onClick={() =>
+                    onPay({
+                      ...i,
+                      customer_name: c.name,
+                      customer_code: c.customer_code,
+                    })
+                  }
+                >
+                  Bayar
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="helper-text">Tidak ada invoice aktif.</p>
+        )}
+      </section>
+    </div>
+  );
 }
 
-function Field({label,wide,children}){return <label className={'field '+(wide?'wide':'')}><span>{label}</span>{children}</label>}
+function CustomerForm({
+  customer,
+  packages,
+  routers,
+  users = [],
+  canAssignCollector = true,
+  globalInvoiceDay = 1,
+  onCancel,
+  onSaved,
+  onError,
+}) {
+  const [f, setF] = useState(() =>
+    customer
+      ? {
+          ...customer,
+          package_id: String(customer.package_id || ""),
+          router_id: String(customer.router_id || ""),
+          billing_day: customer.billing_day || 1,
+          invoice_day_override: customer.invoice_day_override || "",
+          payment_start_day_override: customer.payment_start_day_override ?? "",
+          payment_end_day_override: customer.payment_end_day_override ?? "",
+          grace_days_override: customer.grace_days_override ?? "",
+          isolation_time_override: customer.isolation_time_override
+            ? String(customer.isolation_time_override).slice(0, 5)
+            : "",
+          collector_id: String(customer.collector_id || ""),
+          due_grace_days: customer.due_grace_days || 0,
+          active:
+            customer.active === undefined ? true : Boolean(customer.active),
+          skip_mass_isolation:
+            Boolean(customer.skip_mass_isolation) ||
+            customer.isolation_enabled === false,
+          isolation_enabled: Boolean(customer.isolation_enabled),
+          service_type: customer.service_type || "internet",
+        }
+      : {
+          customer_code: "CUST-" + Date.now().toString().slice(-6),
+          name: "",
+          phone: "",
+          address: "",
+          latitude: "",
+          longitude: "",
+          package_id: "",
+          router_id: "",
+          pppoe_username: "",
+          billing_day: 1,
+          invoice_day_override: "",
+          payment_start_day_override: "",
+          payment_end_day_override: "",
+          grace_days_override: "",
+          isolation_time_override: "",
+          collector_id: "",
+          due_grace_days: 0,
+          active: true,
+          skip_mass_isolation: false,
+          service_type: "internet",
+          isolation_enabled: true,
+          customer_status: "active",
+          notes: "",
+        },
+  );
+  const change = (e) => {
+    const { name, value, type, checked } = e.target;
+    setF((prev) => {
+      const next = { ...prev, [name]: type === "checkbox" ? checked : value };
+      if (name === "service_type") {
+        next.package_id = "";
+        if (value === "tv_cable") {
+          next.router_id = "";
+          next.pppoe_username = "";
+        }
+      }
+      if (name === "package_id") {
+        const pkg = packages.find((p) => String(p.id) === value);
+        if (pkg) {
+          next.service_type = pkg.service_type;
+          if (pkg.service_type === "tv_cable") {
+            next.router_id = "";
+            next.pppoe_username = "";
+          } else if (pkg.router_id) next.router_id = String(pkg.router_id);
+        }
+      }
+      return next;
+    });
+  };
+  const servicePackages = packages.filter(
+    (p) => p.service_type === f.service_type || p.service_type === "bundle",
+  );
+  async function submit(e) {
+    e.preventDefault();
+    try {
+      const payload = {
+        ...f,
+        package_id: f.package_id || null,
+        router_id: f.service_type === "tv_cable" ? null : f.router_id || null,
+        pppoe_username:
+          f.service_type === "tv_cable" ? null : f.pppoe_username || null,
+        billing_day: Number(f.billing_day),
+        invoice_day_override: f.invoice_day_override
+          ? Number(f.invoice_day_override)
+          : null,
+        payment_start_day_override: f.payment_start_day_override
+          ? Number(f.payment_start_day_override)
+          : null,
+        payment_end_day_override: f.payment_end_day_override
+          ? Number(f.payment_end_day_override)
+          : null,
+        grace_days_override:
+          f.grace_days_override !== "" ? Number(f.grace_days_override) : null,
+        isolation_time_override: f.isolation_time_override || null,
+        collector_id: f.collector_id ? Number(f.collector_id) : null,
+        due_grace_days: Number(f.due_grace_days || 0),
+        active: Boolean(f.active),
+        skip_mass_isolation: Boolean(f.skip_mass_isolation),
+        isolation_enabled: !Boolean(f.skip_mass_isolation),
+      };
+      await api(customer ? `/customers/${customer.id}` : "/customers", {
+        method: customer ? "PUT" : "POST",
+        body: JSON.stringify(payload),
+      });
+      onSaved();
+    } catch (e) {
+      onError(e.message);
+    }
+  }
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+    >
+      <section className="payment-modal form-modal">
+        <div className="modal-head">
+          <div>
+            <h3>{customer ? "Edit Pelanggan" : "Tambah Pelanggan"}</h3>
+            <p>Data pelanggan dan pengaturan layanan</p>
+          </div>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onCancel}
+            aria-label="Tutup"
+          >
+            <X size={17} />
+          </button>
+        </div>
+        <form className="form-grid modal-form" onSubmit={submit}>
+          <Field label="Kode pelanggan">
+            <input
+              name="customer_code"
+              value={f.customer_code || ""}
+              onChange={change}
+              required
+              disabled={Boolean(customer)}
+            />
+          </Field>
+          <Field label="Nama pelanggan">
+            <input
+              name="name"
+              value={f.name || ""}
+              onChange={change}
+              required
+            />
+          </Field>
+          <Field label="Nomor HP">
+            <input name="phone" value={f.phone || ""} onChange={change} />
+          </Field>
+          <Field label="Jenis layanan">
+            <select
+              name="service_type"
+              value={f.service_type}
+              onChange={change}
+            >
+              <option value="internet">Internet</option>
+              <option value="tv_cable">TV Kabel</option>
+              <option value="bundle">Bundle</option>
+            </select>
+          </Field>
+          <Field label="Paket">
+            <select name="package_id" value={f.package_id} onChange={change}>
+              <option value="">Pilih paket</option>
+              {servicePackages.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} — {money(p.price)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {f.service_type !== "tv_cable" && (
+            <>
+              <Field label="Router MikroTik">
+                <select name="router_id" value={f.router_id} onChange={change}>
+                  <option value="">Pilih router</option>
+                  {routers.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name} ({r.host})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Username PPPoE">
+                <input
+                  name="pppoe_username"
+                  value={f.pppoe_username || ""}
+                  onChange={change}
+                  placeholder="Kosongkan jika belum terhubung ke MikroTik"
+                />
+              </Field>
+            </>
+          )}
+          {customer && (
+            <Field label="Status pelanggan">
+              <select
+                name="customer_status"
+                value={f.customer_status || "active"}
+                onChange={change}
+              >
+                <option value="active">Aktif</option>
+                <option value="suspended">Ditangguhkan</option>
+                <option value="terminated">Berhenti</option>
+              </select>
+            </Field>
+          )}
+          <Field label="Tanggal generate invoice (1–31)">
+            <input
+              type="number"
+              min="1"
+              max="31"
+              name="invoice_day_override"
+              value={f.invoice_day_override}
+              onChange={change}
+              placeholder="Global"
+            />
+            <small className="helper-text">
+              Kosong mengikuti pengaturan utama.
+            </small>
+          </Field>
+          <Field label="Mulai masa pembayaran (tanggal)">
+            <input
+              type="number"
+              min="1"
+              max="31"
+              name="payment_start_day_override"
+              value={f.payment_start_day_override}
+              onChange={change}
+              placeholder="Global"
+            />
+            <small className="helper-text">
+              Contoh: 1. Kosong mengikuti pengaturan utama.
+            </small>
+          </Field>
+          <Field label="Akhir masa pembayaran (tanggal)">
+            <input
+              type="number"
+              min="1"
+              max="31"
+              name="payment_end_day_override"
+              value={f.payment_end_day_override}
+              onChange={change}
+              placeholder="Global"
+            />
+            <small className="helper-text">
+              Contoh: 13. Jatuh tempo invoice.
+            </small>
+          </Field>
+          <Field label="Masa tenggang / dispensasi (hari)">
+            <input
+              type="number"
+              min="0"
+              name="grace_days_override"
+              value={f.grace_days_override}
+              onChange={change}
+              placeholder="Global"
+            />
+            <small className="helper-text">
+              Kosong mengikuti pengaturan utama.
+            </small>
+          </Field>
+          <Field label="Jam isolir khusus pelanggan">
+            <input
+              type="time"
+              name="isolation_time_override"
+              value={f.isolation_time_override}
+              onChange={change}
+            />
+            <small className="helper-text">
+              Kosong mengikuti jam isolir global.
+            </small>
+          </Field>
+          {canAssignCollector && (
+            <Field label="Kolektor">
+              <select
+                name="collector_id"
+                value={f.collector_id}
+                onChange={change}
+              >
+                <option value="">Belum ditugaskan</option>
+                {users
+                  .filter((u) => u.role === "kolektor" && u.active)
+                  .map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.username})
+                    </option>
+                  ))}
+              </select>
+            </Field>
+          )}
+          <Field label="Alamat" wide>
+            <textarea
+              name="address"
+              value={f.address || ""}
+              onChange={change}
+            />
+          </Field>
+          <Field label="Catatan" wide>
+            <textarea name="notes" value={f.notes || ""} onChange={change} />
+          </Field>
+          <label className="check-field">
+            <input
+              type="checkbox"
+              name="active"
+              checked={Boolean(f.active)}
+              onChange={change}
+            />{" "}
+            Pelanggan aktif dan menerima invoice bulanan
+          </label>
+          <label className="check-field">
+            <input
+              type="checkbox"
+              name="skip_mass_isolation"
+              checked={Boolean(f.skip_mass_isolation)}
+              onChange={change}
+            />{" "}
+            Lewati isolir massal untuk pelanggan ini
+          </label>
+          <div className="form-actions">
+            <button type="button" className="secondary" onClick={onCancel}>
+              Batal
+            </button>
+            <button className="primary">
+              {customer ? "Simpan Perubahan" : "Simpan Pelanggan"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+function PackagePage({ packages, routers, onSaved, onError }) {
+  const blank = {
+    name: "",
+    service_type: "internet",
+    price: "",
+    ppp_profile: "",
+    router_id: "",
+    active: true,
+  };
+  const [f, setF] = useState(blank);
+  const [editing, setEditing] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [profiles, setProfiles] = useState([]);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [packageSearch, setPackageSearch] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchProfiles() {
+      if (f.service_type === "tv_cable" || !f.router_id) {
+        setProfiles([]);
+        return;
+      }
+      setProfileLoading(true);
+      try {
+        const result = await api(`/routers/${f.router_id}/ppp-profiles`);
+        if (!cancelled) setProfiles(result.profiles || []);
+      } catch (e) {
+        if (!cancelled) {
+          setProfiles([]);
+          onError("Gagal mengambil PPP Profile dari MikroTik: " + e.message);
+        }
+      } finally {
+        if (!cancelled) setProfileLoading(false);
+      }
+    }
+    fetchProfiles();
+    return () => {
+      cancelled = true;
+    };
+  }, [f.router_id, f.service_type]);
+  function openNew() {
+    setEditing(null);
+    setF({ ...blank });
+    setModalOpen(true);
+  }
+  function openEdit(p) {
+    setEditing(p.id);
+    setF({
+      name: p.name,
+      service_type: p.service_type,
+      price: String(p.price),
+      ppp_profile: p.ppp_profile || "",
+      router_id: String(p.router_id || ""),
+      active: Boolean(p.active),
+    });
+    setModalOpen(true);
+  }
+  const change = (e) => {
+    const { name, value, type, checked } = e.target;
+    setF((prev) => {
+      const next = { ...prev, [name]: type === "checkbox" ? checked : value };
+      if (name === "service_type" && value === "tv_cable") {
+        next.router_id = "";
+        next.ppp_profile = "";
+      }
+      if (name === "router_id") next.ppp_profile = "";
+      return next;
+    });
+  };
+  async function submit(e) {
+    e.preventDefault();
+    try {
+      await api(editing ? `/packages/${editing}` : "/packages", {
+        method: editing ? "PUT" : "POST",
+        body: JSON.stringify({
+          ...f,
+          price: Number(f.price),
+          router_id:
+            f.service_type === "tv_cable"
+              ? null
+              : f.router_id
+                ? Number(f.router_id)
+                : null,
+          ppp_profile:
+            f.service_type === "tv_cable" ? null : f.ppp_profile || null,
+        }),
+      });
+      setModalOpen(false);
+      onSaved();
+    } catch (e) {
+      onError(e.message);
+    }
+  }
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>Paket Layanan</h3>
+          <p>Kelola paket internet, TV kabel, dan bundling.</p>
+        </div>
+        <button className="primary" onClick={openNew}>
+          <Plus size={17} /> Tambah Paket
+        </button>
+      </div>
+      <div className="toolbar">
+        <div className="search">
+          <Search size={17} />
+          <input
+            placeholder="Cari nama paket, layanan, router, profile..."
+            value={packageSearch}
+            onChange={(e) => setPackageSearch(e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Nama paket</th>
+              <th>Layanan</th>
+              <th>Harga</th>
+              <th>Router MikroTik</th>
+              <th>PPP Profile</th>
+              <th>Status</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {packages
+              .filter((p) =>
+                `${p.name} ${p.service_type} ${p.router_name || ""} ${p.ppp_profile || ""}`
+                  .toLowerCase()
+                  .includes(packageSearch.toLowerCase()),
+              )
+              .map((p) => (
+                <tr key={p.id}>
+                  <td>
+                    <b>{p.name}</b>
+                  </td>
+                  <td>
+                    {{
+                      internet: "Internet",
+                      tv_cable: "TV Kabel",
+                      bundle: "Bundle",
+                    }[p.service_type] || p.service_type}
+                  </td>
+                  <td>{money(p.price)}</td>
+                  <td>
+                    {p.service_type === "tv_cable"
+                      ? "Tidak menggunakan MikroTik"
+                      : p.router_name || "Router belum dipilih"}
+                  </td>
+                  <td>{p.ppp_profile || "—"}</td>
+                  <td>
+                    <span className={"pill " + (p.active ? "green" : "red")}>
+                      {p.active ? "Aktif" : "Nonaktif"}
+                    </span>
+                  </td>
+                  <td>
+                    <button className="small-btn" onClick={() => openEdit(p)}>
+                      Edit
+                    </button>{" "}
+                    <button
+                      className="small-btn danger-btn"
+                      onClick={async () => {
+                        if (
+                          !window.confirm(
+                            `Hapus paket ${p.name}? Pelanggan dan tagihan lama akan tetap ada tanpa tautan paket.`,
+                          )
+                        )
+                          return;
+                        try {
+                          await api(`/packages/${p.id}`, { method: "DELETE" });
+                          onSaved();
+                        } catch (e) {
+                          onError(e.message);
+                        }
+                      }}
+                    >
+                      <Trash2 size={13} /> Hapus
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            {packages.length === 0 && (
+              <tr>
+                <td colSpan="7" className="empty-cell">
+                  Belum ada paket layanan.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {modalOpen && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setModalOpen(false);
+          }}
+        >
+          <section className="payment-modal form-modal">
+            <div className="modal-head">
+              <div>
+                <h3>{editing ? "Edit Paket" : "Tambah Paket"}</h3>
+                <p>PPP Profile diambil langsung dari router yang dipilih.</p>
+              </div>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setModalOpen(false)}
+                aria-label="Tutup"
+              >
+                <X size={17} />
+              </button>
+            </div>
+            <form className="form-grid modal-form" onSubmit={submit}>
+              <Field label="Nama paket">
+                <input required value={f.name} name="name" onChange={change} />
+              </Field>
+              <Field label="Jenis layanan">
+                <select
+                  name="service_type"
+                  value={f.service_type}
+                  onChange={change}
+                >
+                  <option value="internet">Internet</option>
+                  <option value="tv_cable">TV Kabel</option>
+                  <option value="bundle">Bundle</option>
+                </select>
+              </Field>
+              <Field label="Harga bulanan (Rp)">
+                <input
+                  required
+                  type="number"
+                  min="0"
+                  value={f.price}
+                  name="price"
+                  onChange={change}
+                />
+              </Field>
+              {f.service_type !== "tv_cable" && (
+                <>
+                  <Field label="Router MikroTik">
+                    <select
+                      required
+                      name="router_id"
+                      value={f.router_id}
+                      onChange={change}
+                    >
+                      <option value="">Pilih router</option>
+                      {routers.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name} ({r.host})
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Nama PPP Profile">
+                    <select
+                      required
+                      name="ppp_profile"
+                      value={f.ppp_profile}
+                      onChange={change}
+                      disabled={!f.router_id || profileLoading}
+                    >
+                      <option value="">
+                        {!f.router_id
+                          ? "Pilih router terlebih dahulu"
+                          : profileLoading
+                            ? "Mengambil profil…"
+                            : "Pilih PPP Profile"}
+                      </option>
+                      {profiles.map((profile) => (
+                        <option key={profile} value={profile}>
+                          {profile}
+                        </option>
+                      ))}
+                    </select>
+                    {f.router_id &&
+                      profiles.length === 0 &&
+                      !profileLoading && (
+                        <small className="helper-text">
+                          Tidak ada profil terbaca. Pastikan koneksi API dan
+                          izin PPP.
+                        </small>
+                      )}
+                  </Field>
+                </>
+              )}
+              {f.service_type === "tv_cable" && (
+                <div className="info-note field wide">
+                  Paket TV Kabel tidak memerlukan pilihan MikroTik atau PPP
+                  Profile.
+                </div>
+              )}
+              <label className="check-field">
+                <input
+                  type="checkbox"
+                  name="active"
+                  checked={Boolean(f.active)}
+                  onChange={change}
+                />{" "}
+                Paket aktif dan dapat dipilih
+              </label>
+              <div className="form-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setModalOpen(false)}
+                >
+                  Batal
+                </button>
+                <button className="primary">
+                  {editing ? "Simpan Perubahan" : "Tambah Paket"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+    </section>
+  );
+}
+function RouterPage({ routers, onSaved, onError }) {
+  const empty = {
+    name: "",
+    host: "",
+    port: 8728,
+    username: "billing-api",
+    password: "",
+    isolation_profile: "KV-ISOLIR",
+  };
+  const [f, setF] = useState(empty),
+    [show, setShow] = useState(false),
+    [editing, setEditing] = useState(null),
+    [testing, setTesting] = useState(null),
+    [saving, setSaving] = useState(false);
+  function openNew() {
+    setEditing(null);
+    setF({ ...empty });
+    setShow(true);
+  }
+  function openEdit(r) {
+    setEditing(r.id);
+    setF({
+      name: r.name,
+      host: r.host,
+      port: r.port,
+      username: r.username,
+      password: "",
+      isolation_profile: r.isolation_profile || "KV-ISOLIR",
+    });
+    setShow(true);
+  }
+  async function submit(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await api(editing ? `/routers/${editing}` : "/routers", {
+        method: editing ? "PUT" : "POST",
+        body: JSON.stringify(f),
+      });
+      setShow(false);
+      setF({ ...empty });
+      setEditing(null);
+      onSaved();
+    } catch (e) {
+      onError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function removeRouter(r) {
+    if (
+      !window.confirm(
+        `Hapus router ${r.name}? Router yang masih dipakai pelanggan atau paket tidak dapat dihapus.`,
+      )
+    )
+      return;
+    try {
+      await api(`/routers/${r.id}`, { method: "DELETE" });
+      onSaved();
+    } catch (e) {
+      onError(e.message);
+    }
+  }
+  async function test(id) {
+    setTesting(id);
+    try {
+      const r = await api(`/routers/${id}/test`, { method: "POST" });
+      alert(`Berhasil terhubung ke ${r.identity}`);
+    } catch (e) {
+      onError(e.message);
+    } finally {
+      setTesting(null);
+    }
+  }
+  async function validateProfile(id) {
+    setTesting(id);
+    try {
+      const result = await api(`/routers/${id}/use-kv-isolir`, {
+        method: "POST",
+      });
+      onSaved();
+      alert(result.message);
+    } catch (e) {
+      onError(e.message);
+    } finally {
+      setTesting(null);
+    }
+  }
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>Router MikroTik</h3>
+          <p>Konfigurasi koneksi RouterOS API</p>
+        </div>
+        <button className="primary" onClick={openNew}>
+          <Plus size={16} /> Tambah Router
+        </button>
+      </div>
+      <div className="info-note">
+        Buat user API khusus dengan hak minimum yang diperlukan. Batasi akses
+        API hanya dari IP server billing atau jaringan VPN. Jangan buka port API
+        ke internet publik.
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Router</th>
+              <th>Host</th>
+              <th>Profil isolir</th>
+              <th>Status terakhir</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {routers.map((r) => (
+              <tr key={r.id}>
+                <td>
+                  <b>{r.name}</b>
+                </td>
+                <td>
+                  {r.host}:{r.port}
+                </td>
+                <td>{r.isolation_profile}</td>
+                <td>
+                  <span
+                    className={
+                      "pill " +
+                      (r.last_status === "online" ? "green" : "yellow")
+                    }
+                  >
+                    {r.last_status}
+                  </span>
+                </td>
+                <td>
+                  <button className="small-btn" onClick={() => openEdit(r)}>
+                    Edit
+                  </button>{" "}
+                  <button
+                    className="small-btn"
+                    disabled={testing === r.id}
+                    onClick={() => test(r.id)}
+                  >
+                    {testing === r.id ? "Memproses…" : "Test koneksi"}
+                  </button>{" "}
+                  <button
+                    className="small-btn"
+                    disabled={testing === r.id}
+                    onClick={() => validateProfile(r.id)}
+                  >
+                    Validasi KV-ISOLIR
+                  </button>{" "}
+                  <button
+                    className="small-btn danger-btn"
+                    disabled={testing === r.id}
+                    onClick={() => removeRouter(r)}
+                  >
+                    <Trash2 size={13} /> Hapus
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {routers.length === 0 && (
+              <tr>
+                <td colSpan="5" className="empty-cell">
+                  Belum ada router MikroTik.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {show && (
+        <Modal
+          title={editing ? "Edit Router MikroTik" : "Tambah Router MikroTik"}
+          onClose={() => {
+            setShow(false);
+            setEditing(null);
+          }}
+        >
+          <form className="form-grid modal-form" onSubmit={submit}>
+            <Field label="Nama router">
+              <input
+                required
+                value={f.name}
+                onChange={(e) => setF({ ...f, name: e.target.value })}
+              />
+            </Field>
+            <Field label="IP / Host">
+              <input
+                required
+                placeholder="10.10.10.1"
+                value={f.host}
+                onChange={(e) => setF({ ...f, host: e.target.value })}
+              />
+            </Field>
+            <Field label="Port API">
+              <input
+                required
+                type="number"
+                min="1"
+                max="65535"
+                value={f.port}
+                onChange={(e) => setF({ ...f, port: Number(e.target.value) })}
+              />
+            </Field>
+            <Field label="Username API">
+              <input
+                required
+                value={f.username}
+                onChange={(e) => setF({ ...f, username: e.target.value })}
+              />
+            </Field>
+            <Field
+              label={
+                editing
+                  ? "Password API (kosongkan jika tidak diubah)"
+                  : "Password API"
+              }
+            >
+              <input
+                required={!editing}
+                type="password"
+                autoComplete="new-password"
+                placeholder={
+                  editing
+                    ? "Biarkan kosong untuk mempertahankan password"
+                    : "Password API router"
+                }
+                value={f.password}
+                onChange={(e) => setF({ ...f, password: e.target.value })}
+              />
+            </Field>
+            <Field label="Profil isolir">
+              <input value="KV-ISOLIR" readOnly />
+            </Field>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setShow(false);
+                  setEditing(null);
+                }}
+              >
+                Batal
+              </button>
+              <button className="primary" disabled={saving}>
+                {saving
+                  ? "Menyimpan…"
+                  : editing
+                    ? "Simpan Perubahan"
+                    : "Simpan Router"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </section>
+  );
+}
+function SettingsPage({ onSaved, onError }) {
+  const [f, setF] = useState({
+      invoice_generation_day: 1,
+      payment_start_day: 1,
+      payment_end_day: 13,
+      grace_days: 2,
+      isolation_day_offset: 0,
+      isolation_time: "00:01:00",
+      auto_reactivate: true,
+    }),
+    [show, setShow] = useState(false);
+  useEffect(() => {
+    api("/settings/billing")
+      .then((d) => setF({ ...d, auto_reactivate: Boolean(d.auto_reactivate) }))
+      .catch((e) => onError(e.message));
+  }, []);
+  async function submit(e) {
+    e.preventDefault();
+    try {
+      await api("/settings/billing", {
+        method: "PUT",
+        body: JSON.stringify(f),
+      });
+      setShow(false);
+      onSaved();
+    } catch (e) {
+      onError(e.message);
+    }
+  }
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>Pengaturan Billing</h3>
+          <p>Atur pembuatan tagihan dan isolir otomatis.</p>
+        </div>
+        <button className="primary" onClick={() => setShow(true)}>
+          Ubah Pengaturan
+        </button>
+      </div>
+      <div className="info-note">
+        Invoice dibuat tanggal {f.invoice_generation_day}. Masa pembayaran
+        tanggal {f.payment_start_day}–{f.payment_end_day}. Dispensasi{" "}
+        {f.grace_days} hari; isolir massal berjalan tanggal{" "}
+        {Math.min(
+          31,
+          Number(f.payment_end_day || 13) +
+            Number(f.grace_days || 2) +
+            1 +
+            Number(f.isolation_day_offset || 0),
+        )}{" "}
+        pukul {f.isolation_time}. Pelanggan dengan opsi Lewati isolir massal
+        tidak akan diisolir. Aktivasi kembali otomatis:{" "}
+        {f.auto_reactivate ? "Aktif" : "Nonaktif"}.
+      </div>
+      <div className="info-note">
+        Sebelum produksi, uji pada satu akun pelanggan. Pastikan profile
+        KV-ISOLIR tersedia di setiap MikroTik.
+      </div>
+      {show && (
+        <Modal title="Pengaturan Billing" onClose={() => setShow(false)}>
+          <form className="form-grid modal-form" onSubmit={submit}>
+            <Field label="Tanggal generate invoice">
+              <input
+                type="number"
+                min="1"
+                max="31"
+                value={f.invoice_generation_day}
+                onChange={(e) =>
+                  setF({ ...f, invoice_generation_day: Number(e.target.value) })
+                }
+              />
+            </Field>
+            <Field label="Awal masa pembayaran">
+              <input
+                type="number"
+                min="1"
+                max="31"
+                value={f.payment_start_day}
+                onChange={(e) =>
+                  setF({ ...f, payment_start_day: Number(e.target.value) })
+                }
+              />
+            </Field>
+            <Field label="Akhir masa pembayaran / jatuh tempo">
+              <input
+                type="number"
+                min="1"
+                max="31"
+                value={f.payment_end_day}
+                onChange={(e) =>
+                  setF({ ...f, payment_end_day: Number(e.target.value) })
+                }
+              />
+            </Field>
+            <Field label="Masa tenggang / dispensasi (hari)">
+              <input
+                type="number"
+                min="0"
+                value={f.grace_days}
+                onChange={(e) =>
+                  setF({ ...f, grace_days: Number(e.target.value) })
+                }
+              />
+            </Field>
+            <Field label="Tambahan hari sebelum isolir">
+              <input
+                type="number"
+                min="0"
+                value={f.isolation_day_offset}
+                onChange={(e) =>
+                  setF({ ...f, isolation_day_offset: Number(e.target.value) })
+                }
+              />
+            </Field>
+            <Field label="Jam isolir massal">
+              <input
+                type="time"
+                value={f.isolation_time}
+                onChange={(e) => setF({ ...f, isolation_time: e.target.value })}
+              />
+            </Field>
+            <Field label="Aktivasi kembali otomatis">
+              <select
+                value={String(f.auto_reactivate)}
+                onChange={(e) =>
+                  setF({ ...f, auto_reactivate: e.target.value === "true" })
+                }
+              >
+                <option value="true">Aktif</option>
+                <option value="false">Nonaktif</option>
+              </select>
+            </Field>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setShow(false)}
+              >
+                Batal
+              </button>
+              <button className="primary">Simpan Pengaturan</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </section>
+  );
+}
+function PaymentModal({ invoice, accounts, onClose, onSubmit }) {
+  const [f, setF] = useState({
+    amount: String(Number(invoice.amount) - Number(invoice.paid_amount)),
+    method: "cash",
+    account_id: "",
+    reference_number: "",
+    notes: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const change = (e) => setF({ ...f, [e.target.name]: e.target.value });
+  async function submit(e) {
+    e.preventDefault();
+    if (f.method === "transfer" && !f.account_id)
+      return alert("Pilih rekening tujuan transfer.");
+    setSaving(true);
+    try {
+      await onSubmit({
+        invoice_id: invoice.id,
+        amount: Number(f.amount),
+        method: f.method,
+        account_id: f.method === "transfer" ? Number(f.account_id) : null,
+        reference_number: f.reference_number,
+        notes: f.notes,
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section className="payment-modal">
+        <div className="modal-head">
+          <div>
+            <h3>Catat Pembayaran</h3>
+            <p>
+              {invoice.invoice_number} · {invoice.customer_name}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onClose}
+            aria-label="Tutup"
+          >
+            <X size={17} />
+          </button>
+        </div>
+        <div className="payment-due">
+          <span>Sisa tagihan</span>
+          <b>{money(Number(invoice.amount) - Number(invoice.paid_amount))}</b>
+        </div>
+        <form className="form-grid modal-form" onSubmit={submit}>
+          <Field label="Nominal pembayaran (Rp)">
+            <input
+              type="number"
+              min="1"
+              max={Number(invoice.amount) - Number(invoice.paid_amount)}
+              required
+              value={f.amount}
+              onChange={change}
+              name="amount"
+            />
+          </Field>
+          <Field label="Metode pembayaran">
+            <select name="method" value={f.method} onChange={change}>
+              <option value="cash">Cash / Tunai</option>
+              <option value="transfer">Transfer bank</option>
+            </select>
+          </Field>
+          {f.method === "transfer" && (
+            <>
+              <Field label="Rekening tujuan" wide>
+                <select
+                  name="account_id"
+                  value={f.account_id}
+                  onChange={change}
+                  required
+                >
+                  <option value="">Pilih rekening</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.bank_name} — {a.account_number} (a.n. {a.account_name})
+                    </option>
+                  ))}
+                </select>
+                {accounts.length === 0 && (
+                  <small className="helper-text">
+                    Belum ada rekening aktif. Tambahkan melalui menu Rekening
+                    terlebih dahulu.
+                  </small>
+                )}
+              </Field>
+              <Field label="Nomor referensi / bukti transfer">
+                <input
+                  name="reference_number"
+                  value={f.reference_number}
+                  onChange={change}
+                  placeholder="Opsional"
+                />
+              </Field>
+            </>
+          )}
+          <Field label="Catatan" wide>
+            <textarea
+              name="notes"
+              value={f.notes}
+              onChange={change}
+              placeholder="Catatan pembayaran (opsional)"
+            />
+          </Field>
+          <div className="form-actions">
+            <button type="button" className="secondary" onClick={onClose}>
+              Batal
+            </button>
+            <button className="primary" disabled={saving}>
+              {saving ? "Menyimpan…" : "Simpan Pembayaran"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+function BankAccountsPage({ accounts, onSaved, onError }) {
+  const empty = {
+    bank_name: "",
+    account_name: "",
+    account_number: "",
+    branch: "",
+    notes: "",
+    is_active: true,
+  };
+  const [f, setF] = useState(empty);
+  const [editing, setEditing] = useState(null),
+    [show, setShow] = useState(false);
+  const change = (e) =>
+    setF({
+      ...f,
+      [e.target.name]:
+        e.target.type === "checkbox" ? e.target.checked : e.target.value,
+    });
+  function edit(a) {
+    setEditing(a.id);
+    setF({
+      bank_name: a.bank_name,
+      account_name: a.account_name,
+      account_number: a.account_number,
+      branch: a.branch || "",
+      notes: a.notes || "",
+      is_active: Boolean(a.is_active),
+    });
+    setShow(true);
+  }
+  function open() {
+    setEditing(null);
+    setF(empty);
+    setShow(true);
+  }
+  async function submit(e) {
+    e.preventDefault();
+    try {
+      await api(editing ? `/bank-accounts/${editing}` : "/bank-accounts", {
+        method: editing ? "PUT" : "POST",
+        body: JSON.stringify(f),
+      });
+      setShow(false);
+      setEditing(null);
+      onSaved();
+    } catch (e) {
+      onError(e.message);
+    }
+  }
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>Manajemen Rekening</h3>
+          <p>Kelola rekening tujuan untuk menerima pembayaran transfer.</p>
+        </div>
+        <button className="primary" onClick={open}>
+          <Plus size={16} /> Tambah Rekening
+        </button>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Bank</th>
+              <th>Nomor rekening</th>
+              <th>Nama pemilik</th>
+              <th>Cabang</th>
+              <th>Status</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {accounts.map((a) => (
+              <tr key={a.id}>
+                <td>
+                  <b>{a.bank_name}</b>
+                </td>
+                <td>{a.account_number}</td>
+                <td>{a.account_name}</td>
+                <td>{a.branch || "—"}</td>
+                <td>
+                  <span className={"pill " + (a.is_active ? "green" : "red")}>
+                    {a.is_active ? "Aktif" : "Nonaktif"}
+                  </span>
+                </td>
+                <td>
+                  <button className="small-btn" onClick={() => edit(a)}>
+                    Edit
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="info-note">
+        Rekening nonaktif tetap tersimpan untuk riwayat transaksi, tetapi tidak
+        muncul sebagai pilihan rekening tujuan pada pembayaran baru.
+      </div>
+      {show && (
+        <Modal
+          title={editing ? "Edit Rekening" : "Tambah Rekening"}
+          onClose={() => setShow(false)}
+        >
+          <form className="form-grid modal-form" onSubmit={submit}>
+            <Field label="Nama bank">
+              <input
+                name="bank_name"
+                value={f.bank_name}
+                onChange={change}
+                required
+              />
+            </Field>
+            <Field label="Nama pemilik rekening">
+              <input
+                name="account_name"
+                value={f.account_name}
+                onChange={change}
+                required
+              />
+            </Field>
+            <Field label="Nomor rekening">
+              <input
+                name="account_number"
+                value={f.account_number}
+                onChange={change}
+                required
+              />
+            </Field>
+            <Field label="Cabang">
+              <input name="branch" value={f.branch} onChange={change} />
+            </Field>
+            <Field label="Catatan">
+              <input name="notes" value={f.notes} onChange={change} />
+            </Field>
+            <label className="check-field">
+              <input
+                type="checkbox"
+                name="is_active"
+                checked={f.is_active}
+                onChange={change}
+              />{" "}
+              Rekening aktif dan dapat dipilih saat pembayaran
+            </label>
+            <div className="form-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setShow(false)}
+              >
+                Batal
+              </button>
+              <button className="primary">
+                {editing ? "Simpan Perubahan" : "Tambah Rekening"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </section>
+  );
+}
 
+function Field({ label, wide, children }) {
+  return (
+    <label className={"field " + (wide ? "wide" : "")}>
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
 
-
-function App(){
- const [auth,setAuth]=useState(()=>{try{const token=localStorage.getItem('billing_token'),user=JSON.parse(localStorage.getItem('billing_user')||'null');return token&&user?{token,user}:null}catch{return null}});
- const [brand,setBrand]=useState('BillingNet');
- useEffect(()=>{api('/brand').then(r=>setBrand(r.brand_name)).catch(()=>{})},[]);
- useEffect(()=>{const expired=()=>setAuth(null);window.addEventListener('billing:session-expired',expired);return()=>window.removeEventListener('billing:session-expired',expired)},[]);
- function login(result){localStorage.setItem('billing_token',result.token);localStorage.setItem('billing_user',JSON.stringify(result.user));setAuth({...result,setUser:u=>{setAuth(a=>({...a,user:u}));localStorage.setItem('billing_user',JSON.stringify(u))}})}
- async function logout(){try{await api('/auth/logout',{method:'POST'})}catch{}localStorage.removeItem('billing_token');localStorage.removeItem('billing_user');setAuth(null)}
- if(!auth)return <LoginPage brand={brand} onLogin={login}/>;
- return <BillingApp key={auth.user.id} auth={{...auth,setUser:u=>{setAuth(a=>({...a,user:u}));localStorage.setItem('billing_user',JSON.stringify(u))}}} onLogout={logout}/>;
+function App() {
+  const [auth, setAuth] = useState(() => {
+    try {
+      const token = localStorage.getItem("billing_token"),
+        user = JSON.parse(localStorage.getItem("billing_user") || "null");
+      return token && user ? { token, user } : null;
+    } catch {
+      return null;
+    }
+  });
+  const [brand, setBrand] = useState("BillingNet");
+  useEffect(() => {
+    api("/brand")
+      .then((r) => setBrand(r.brand_name))
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    const expired = () => setAuth(null);
+    window.addEventListener("billing:session-expired", expired);
+    return () => window.removeEventListener("billing:session-expired", expired);
+  }, []);
+  function login(result) {
+    localStorage.setItem("billing_token", result.token);
+    localStorage.setItem("billing_user", JSON.stringify(result.user));
+    setAuth({
+      ...result,
+      setUser: (u) => {
+        setAuth((a) => ({ ...a, user: u }));
+        localStorage.setItem("billing_user", JSON.stringify(u));
+      },
+    });
+  }
+  async function logout() {
+    try {
+      await api("/auth/logout", { method: "POST" });
+    } catch {}
+    localStorage.removeItem("billing_token");
+    localStorage.removeItem("billing_user");
+    setAuth(null);
+  }
+  if (!auth) return <LoginPage brand={brand} onLogin={login} />;
+  return (
+    <BillingApp
+      key={auth.user.id}
+      auth={{
+        ...auth,
+        setUser: (u) => {
+          setAuth((a) => ({ ...a, user: u }));
+          localStorage.setItem("billing_user", JSON.stringify(u));
+        },
+      }}
+      onLogout={logout}
+    />
+  );
 }
 export default App;

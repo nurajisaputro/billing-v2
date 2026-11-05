@@ -142,6 +142,42 @@ app.get('/api/customers', asyncRoute(async (_req, res) => {
   res.json(rows);
 }));
 
+app.post('/api/customers/import', asyncRoute(async(req,res)=>{
+  const rows=Array.isArray(req.body.rows)?req.body.rows:[];
+  if(!rows.length)return res.status(400).json({error:'Tidak ada data pelanggan untuk diimpor.'});
+  if(rows.length>1000)return res.status(400).json({error:'Maksimal 1.000 pelanggan per proses import.'});
+  const [packages]=await pool.query('SELECT id,name,service_type,router_id FROM packages');
+  const packageMap=new Map(packages.map(p=>[String(p.name).trim().toLowerCase(),p]));
+  const conn=await pool.getConnection();let imported=0;const errors=[];
+  try{
+    await conn.beginTransaction();
+    for(let index=0;index<rows.length;index++){
+      const row=rows[index]||{};const line=index+2;const name=String(row.name||'').trim();
+      if(!name){errors.push(`Baris ${line}: nama pelanggan wajib diisi.`);continue;}
+      const service=['internet','tv_cable','bundle'].includes(row.service_type)?row.service_type:'internet';
+      const packageName=String(row.package_name||'').trim();const pkg=packageName?packageMap.get(packageName.toLowerCase()):null;
+      if(!packageName){errors.push(`Baris ${line}: paket wajib diisi.`);continue;}
+      if(!['internet','tv_cable','bundle'].includes(row.service_type)){errors.push(`Baris ${line}: layanan wajib diisi dengan internet, tv_cable, atau bundle.`);continue;}
+      if(packageName&&!pkg){errors.push(`Baris ${line}: paket "${packageName}" tidak ditemukan.`);continue;}
+      if(pkg&&pkg.service_type!==service&&pkg.service_type!=='bundle'&&service!=='bundle'){errors.push(`Baris ${line}: layanan tidak sesuai dengan paket "${packageName}".`);continue;}
+      const code=`IMP-${Date.now().toString(36).toUpperCase()}-${index+1}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+      await conn.execute(`INSERT INTO customers (customer_code,name,phone,address,service_type,package_id,router_id,billing_day,active,skip_mass_isolation,isolation_enabled) VALUES (?,?,?,?,?,?,?,1,1,0,1)`,[code,name,String(row.phone||'').trim()||null,String(row.address||'').trim()||null,service,pkg?.id||null,service==='tv_cable'?null:(pkg?.router_id||null)]);
+      imported++;
+    }
+    await conn.commit();
+  }catch(error){await conn.rollback();throw error;}finally{conn.release();}
+  res.status(201).json({ok:true,imported,skipped:rows.length-imported,errors});
+}));
+
+app.get('/api/customers/:id/details', asyncRoute(async(req,res)=>{
+  const id=Number(req.params.id); if(!Number.isInteger(id)||id<1)return res.status(400).json({error:'ID pelanggan tidak valid.'});
+  const [customers]=await pool.execute(`SELECT c.*,p.name package_name,p.price package_price,r.name router_name,r.host router_host,u.name collector_name FROM customers c LEFT JOIN packages p ON p.id=c.package_id LEFT JOIN routers r ON r.id=c.router_id LEFT JOIN users u ON u.id=c.collector_id WHERE c.id=?`,[id]);
+  if(!customers.length)return res.status(404).json({error:'Pelanggan tidak ditemukan.'});
+  const [payments]=await pool.execute(`SELECT pay.id,pay.receipt_number,pay.amount,pay.method,pay.paid_at,pay.reference_number,i.invoice_number,i.period_start,i.period_end FROM payments pay JOIN invoices i ON i.id=pay.invoice_id WHERE i.customer_id=? ORDER BY pay.paid_at DESC,pay.id DESC LIMIT 1`,[id]);
+  const [activeInvoices]=await pool.execute(`SELECT id,invoice_number,period_start,period_end,due_date,amount,paid_amount,status FROM invoices WHERE customer_id=? AND status IN ('unpaid','partial') ORDER BY due_date ASC,id DESC`,[id]);
+  res.json({customer:customers[0],last_payment:payments[0]||null,active_invoices:activeInvoices});
+}));
+
 app.put('/api/customers/collector/bulk', asyncRoute(async(req,res)=>{
   const ids=Array.isArray(req.body.customer_ids)?req.body.customer_ids.map(Number).filter(Number.isInteger):[];
   const collectorId=req.body.collector_id?Number(req.body.collector_id):null;
@@ -155,8 +191,9 @@ app.put('/api/customers/collector/bulk', asyncRoute(async(req,res)=>{
 // Status pelanggan dicek dari router online dan sesi PPP aktif. Router/API gagal atau sesi tidak aktif ditampilkan Offline.
 app.get('/api/customers/status', asyncRoute(async (_req, res) => {
   const [routers] = await pool.query('SELECT id, name FROM routers WHERE enabled=1 ORDER BY id');
-  const [customers] = await pool.query(`SELECT id, router_id, pppoe_username FROM customers WHERE router_id IS NOT NULL AND pppoe_username IS NOT NULL AND pppoe_username <> ''`);
-  const statuses = {};
+  const [allCustomers] = await pool.query(`SELECT id, router_id, pppoe_username FROM customers`);
+  const customers = allCustomers.filter(c=>c.router_id && c.pppoe_username);
+  const statuses = Object.fromEntries(allCustomers.filter(c=>!c.pppoe_username).map(c=>[c.id,{status:'not_connected',ip:null,router_status:'not_configured'}]));
   for (const customer of customers) statuses[customer.id] = { status: 'offline', ip: null, router_status: 'offline' };
   for (const router of routers) {
     try {
@@ -181,11 +218,12 @@ app.post('/api/customers', asyncRoute(async (req, res) => {
   if(b.payment_start_day_override&&b.payment_end_day_override&&Number(b.payment_end_day_override)<Number(b.payment_start_day_override))return res.status(400).json({error:'Tanggal akhir masa pembayaran harus sama atau setelah tanggal mulai.'});
   if(b.collector_id){const [collector]=await pool.execute("SELECT id FROM users WHERE id=? AND role='kolektor' AND active=1",[b.collector_id]);if(!collector.length)return res.status(400).json({error:'Kolektor tidak ditemukan atau tidak aktif.'});}
   if(serviceType==='tv_cable' && (b.router_id || b.pppoe_username)) return res.status(400).json({error:'Pelanggan TV kabel tidak memerlukan router atau username PPPoE'});
-  if(serviceType!=='tv_cable' && (!b.router_id || !b.pppoe_username)) return res.status(400).json({error:'Pelanggan internet/bundle wajib memilih router dan username PPPoE'});
+  if(serviceType!=='tv_cable' && b.pppoe_username && !b.router_id) return res.status(400).json({error:'Pilih router MikroTik jika mengisi username PPPoE'});
+  if((b.latitude!==''&&b.latitude!=null&&!Number.isFinite(Number(b.latitude)))||(b.longitude!==''&&b.longitude!=null&&!Number.isFinite(Number(b.longitude)))||(b.latitude!==''&&b.latitude!=null&&(Number(b.latitude)<-90||Number(b.latitude)>90))||(b.longitude!==''&&b.longitude!=null&&(Number(b.longitude)<-180||Number(b.longitude)>180)))return res.status(400).json({error:'Koordinat tidak valid. Latitude -90 sampai 90 dan longitude -180 sampai 180.'});
   if(serviceType!=='tv_cable' && b.package_id){const [pkgs]=await pool.execute('SELECT router_id FROM packages WHERE id=?',[b.package_id]);if(pkgs[0]?.router_id&&b.router_id&&Number(pkgs[0].router_id)!==Number(b.router_id))return res.status(400).json({error:'Router pelanggan harus sama dengan router pada paket yang dipilih'});}
   const [result] = await pool.execute(`INSERT INTO customers
-    (customer_code,name,phone,address,service_type,package_id,router_id,pppoe_username,billing_day,invoice_day_override,payment_start_day_override,payment_end_day_override,grace_days_override,isolation_time_override,collector_id,due_grace_days,active,skip_mass_isolation,isolation_enabled,notes)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [b.customer_code,b.name,b.phone||null,b.address||null,serviceType,b.package_id||null,serviceType==='tv_cable'?null:(b.router_id||null),serviceType==='tv_cable'?null:(b.pppoe_username||null),Math.min(31,Math.max(1,Number(b.billing_day||1))),b.invoice_day_override?Math.min(31,Math.max(1,Number(b.invoice_day_override))):null,b.payment_start_day_override?Math.min(31,Math.max(1,Number(b.payment_start_day_override))):null,b.payment_end_day_override?Math.min(31,Math.max(1,Number(b.payment_end_day_override))):null,b.grace_days_override!==''&&b.grace_days_override!==null&&b.grace_days_override!==undefined?Math.max(0,Number(b.grace_days_override)):null,b.isolation_time_override||null,b.collector_id||null,Math.max(0,Number(b.due_grace_days||0)),b.active===false?0:1,b.skip_mass_isolation?1:0,(b.isolation_enabled===false||b.skip_mass_isolation)?0:1,b.notes||null]);
+    (customer_code,name,phone,address,latitude,longitude,service_type,package_id,router_id,pppoe_username,billing_day,invoice_day_override,payment_start_day_override,payment_end_day_override,grace_days_override,isolation_time_override,collector_id,due_grace_days,active,skip_mass_isolation,isolation_enabled,notes)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, [b.customer_code,b.name,b.phone||null,b.address||null,(b.latitude!==''&&b.latitude!==null&&b.latitude!==undefined?Number(b.latitude):null),(b.longitude!==''&&b.longitude!==null&&b.longitude!==undefined?Number(b.longitude):null),serviceType,b.package_id||null,serviceType==='tv_cable'?null:(b.router_id||null),serviceType==='tv_cable'?null:(b.pppoe_username||null),Math.min(31,Math.max(1,Number(b.billing_day||1))),b.invoice_day_override?Math.min(31,Math.max(1,Number(b.invoice_day_override))):null,b.payment_start_day_override?Math.min(31,Math.max(1,Number(b.payment_start_day_override))):null,b.payment_end_day_override?Math.min(31,Math.max(1,Number(b.payment_end_day_override))):null,b.grace_days_override!==''&&b.grace_days_override!==null&&b.grace_days_override!==undefined?Math.max(0,Number(b.grace_days_override)):null,b.isolation_time_override||null,b.collector_id||null,Math.max(0,Number(b.due_grace_days||0)),b.active===false?0:1,b.skip_mass_isolation?1:0,(b.isolation_enabled===false||b.skip_mass_isolation)?0:1,b.notes||null]);
   await logActivity('customer_created','customer',result.insertId,{customerCode:b.customer_code});
   res.status(201).json({ id: result.insertId });
 }));
@@ -194,10 +232,11 @@ app.put('/api/customers/:id', asyncRoute(async (req,res) => {
   if(b.payment_start_day_override&&b.payment_end_day_override&&Number(b.payment_end_day_override)<Number(b.payment_start_day_override))return res.status(400).json({error:'Tanggal akhir masa pembayaran harus sama atau setelah tanggal mulai.'});
   if(b.collector_id){const [collector]=await pool.execute("SELECT id FROM users WHERE id=? AND role='kolektor' AND active=1",[b.collector_id]);if(!collector.length)return res.status(400).json({error:'Kolektor tidak ditemukan atau tidak aktif.'});}
   if(serviceType==='tv_cable' && (b.router_id || b.pppoe_username)) return res.status(400).json({error:'Pelanggan TV kabel tidak memerlukan router atau username PPPoE'});
-  if(serviceType!=='tv_cable' && (!b.router_id || !b.pppoe_username)) return res.status(400).json({error:'Pelanggan internet/bundle wajib memilih router dan username PPPoE'});
+  if(serviceType!=='tv_cable' && b.pppoe_username && !b.router_id) return res.status(400).json({error:'Pilih router MikroTik jika mengisi username PPPoE'});
+  if((b.latitude!==''&&b.latitude!=null&&!Number.isFinite(Number(b.latitude)))||(b.longitude!==''&&b.longitude!=null&&!Number.isFinite(Number(b.longitude)))||(b.latitude!==''&&b.latitude!=null&&(Number(b.latitude)<-90||Number(b.latitude)>90))||(b.longitude!==''&&b.longitude!=null&&(Number(b.longitude)<-180||Number(b.longitude)>180)))return res.status(400).json({error:'Koordinat tidak valid. Latitude -90 sampai 90 dan longitude -180 sampai 180.'});
   if(serviceType!=='tv_cable' && b.package_id){const [pkgs]=await pool.execute('SELECT router_id FROM packages WHERE id=?',[b.package_id]);if(pkgs[0]?.router_id&&b.router_id&&Number(pkgs[0].router_id)!==Number(b.router_id))return res.status(400).json({error:'Router pelanggan harus sama dengan router pada paket yang dipilih'});}
-  await pool.execute(`UPDATE customers SET name=?,phone=?,address=?,service_type=?,package_id=?,router_id=?,pppoe_username=?,billing_day=?,invoice_day_override=?,payment_start_day_override=?,payment_end_day_override=?,grace_days_override=?,isolation_time_override=?,collector_id=?,due_grace_days=?,active=?,skip_mass_isolation=?,isolation_enabled=?,customer_status=?,notes=? WHERE id=?`,
-    [b.name,b.phone||null,b.address||null,serviceType,b.package_id||null,serviceType==='tv_cable'?null:(b.router_id||null),serviceType==='tv_cable'?null:(b.pppoe_username||null),Math.min(31,Math.max(1,Number(b.billing_day||1))),b.invoice_day_override?Math.min(31,Math.max(1,Number(b.invoice_day_override))):null,b.payment_start_day_override?Math.min(31,Math.max(1,Number(b.payment_start_day_override))):null,b.payment_end_day_override?Math.min(31,Math.max(1,Number(b.payment_end_day_override))):null,b.grace_days_override!==''&&b.grace_days_override!==null&&b.grace_days_override!==undefined?Math.max(0,Number(b.grace_days_override)):null,b.isolation_time_override||null,b.collector_id||null,Math.max(0,Number(b.due_grace_days||0)),b.active===false?0:1,b.skip_mass_isolation?1:0,(b.isolation_enabled===false||b.skip_mass_isolation)?0:1,b.customer_status||'active',b.notes||null,req.params.id]);
+  await pool.execute(`UPDATE customers SET name=?,phone=?,address=?,latitude=?,longitude=?,service_type=?,package_id=?,router_id=?,pppoe_username=?,billing_day=?,invoice_day_override=?,payment_start_day_override=?,payment_end_day_override=?,grace_days_override=?,isolation_time_override=?,collector_id=?,due_grace_days=?,active=?,skip_mass_isolation=?,isolation_enabled=?,customer_status=?,notes=? WHERE id=?`,
+    [b.name,b.phone||null,b.address||null,(b.latitude!==''&&b.latitude!=null?Number(b.latitude):null),(b.longitude!==''&&b.longitude!=null?Number(b.longitude):null),serviceType,b.package_id||null,serviceType==='tv_cable'?null:(b.router_id||null),serviceType==='tv_cable'?null:(b.pppoe_username||null),Math.min(31,Math.max(1,Number(b.billing_day||1))),b.invoice_day_override?Math.min(31,Math.max(1,Number(b.invoice_day_override))):null,b.payment_start_day_override?Math.min(31,Math.max(1,Number(b.payment_start_day_override))):null,b.payment_end_day_override?Math.min(31,Math.max(1,Number(b.payment_end_day_override))):null,b.grace_days_override!==''&&b.grace_days_override!==null&&b.grace_days_override!==undefined?Math.max(0,Number(b.grace_days_override)):null,b.isolation_time_override||null,b.collector_id||null,Math.max(0,Number(b.due_grace_days||0)),b.active===false?0:1,b.skip_mass_isolation?1:0,(b.isolation_enabled===false||b.skip_mass_isolation)?0:1,b.customer_status||'active',b.notes||null,req.params.id]);
   await logActivity('customer_updated','customer',Number(req.params.id),{}); res.json({ok:true});
 }));
 app.delete('/api/customers/:id', asyncRoute(async(req,res)=>{
@@ -346,17 +385,19 @@ app.post('/api/invoices/generate', asyncRoute(async(req,res)=>{const count=await
 app.post('/api/payments', asyncRoute(async(req,res)=>{const b=req.body;if(!b.invoice_id||!b.amount||!['cash','transfer'].includes(b.method))return res.status(400).json({error:'Tagihan, nominal, dan metode cash/transfer wajib diisi'});if(b.method==='transfer'&&!b.account_id)return res.status(400).json({error:'Pilih rekening tujuan untuk pembayaran transfer'});res.status(201).json(await recordPayment({invoiceId:b.invoice_id,amount:b.amount,method:b.method,accountId:b.account_id,referenceNumber:b.reference_number,notes:b.notes,createdBy:b.created_by||'admin'}));}));
 app.post('/api/customers/:id/isolate', asyncRoute(async(req,res)=>{
   if(!['superadmin','admin'].includes(req.user?.role))return res.status(403).json({error:'Hanya admin atau superadmin yang dapat mengisolir pelanggan.'});
-  const [rows]=await pool.execute('SELECT id,name,active,customer_status,service_type FROM customers WHERE id=?',[req.params.id]);
+  const [rows]=await pool.execute('SELECT id,name,active,customer_status,service_type,router_id,pppoe_username FROM customers WHERE id=?',[req.params.id]);
   if(!rows.length)return res.status(404).json({error:'Pelanggan tidak ditemukan.'});
   if(!rows[0].active || rows[0].customer_status!=='active')return res.status(400).json({error:'Pelanggan nonaktif atau ditangguhkan tidak dapat diisolir.'});
   if(rows[0].service_type==='tv_cable')return res.status(400).json({error:'Pelanggan TV kabel tidak menggunakan MikroTik.'});
+  if(!rows[0].router_id||!rows[0].pppoe_username)return res.status(400).json({error:'Pelanggan belum terhubung ke MikroTik karena router atau username PPPoE belum diatur.'});
   res.json(await setCustomerProfile(req.params.id,'isolate'));
 }));
 app.post('/api/customers/:id/reactivate', asyncRoute(async(req,res)=>{
   if(!['superadmin','admin'].includes(req.user?.role))return res.status(403).json({error:'Hanya admin atau superadmin yang dapat mengaktifkan kembali pelanggan.'});
-  const [rows]=await pool.execute('SELECT id,service_type FROM customers WHERE id=?',[req.params.id]);
+  const [rows]=await pool.execute('SELECT id,service_type,router_id,pppoe_username FROM customers WHERE id=?',[req.params.id]);
   if(!rows.length)return res.status(404).json({error:'Pelanggan tidak ditemukan.'});
   if(rows[0].service_type==='tv_cable')return res.status(400).json({error:'Pelanggan TV kabel tidak menggunakan MikroTik.'});
+  if(!rows[0].router_id||!rows[0].pppoe_username)return res.status(400).json({error:'Pelanggan belum terhubung ke MikroTik karena router atau username PPPoE belum diatur.'});
   res.json(await setCustomerProfile(req.params.id,'reactivate'));
 }));
 

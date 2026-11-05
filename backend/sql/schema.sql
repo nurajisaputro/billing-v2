@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS customers (
   name VARCHAR(150) NOT NULL,
   phone VARCHAR(40) NULL,
   address TEXT NULL,
+  latitude DECIMAL(10,7) NULL,
+  longitude DECIMAL(10,7) NULL,
   service_type ENUM('internet','tv_cable','bundle') NOT NULL DEFAULT 'internet',
   package_id BIGINT UNSIGNED NULL,
   router_id BIGINT UNSIGNED NULL,
