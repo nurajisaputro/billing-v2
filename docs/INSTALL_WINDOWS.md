@@ -25,7 +25,7 @@ Jika perintah `mysql` tidak dikenali, gunakan MySQL Command Line Client atau tam
 Clone repository setelah dipublikasikan:
 
 ```powershell
-git clone https://github.com/USERNAME/REPOSITORY.git C:\BillingRTNet
+git clone https://github.com/nurajisaputro/billing-v2.git C:\BillingRTNet
 cd C:\BillingRTNet
 ```
 

@@ -82,3 +82,6 @@ td{font-size:13px;padding:15px 16px}
 .import-csv-btn{position:relative;overflow:hidden}.import-csv-btn input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}.customer-detail-page .customer-detail-body{padding:20px 22px 26px}.customer-detail-page .detail-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.customer-detail-page .detail-payment{grid-template-columns:repeat(4,minmax(0,1fr))}@media(max-width:900px){.customer-detail-page .detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.customer-detail-page .detail-payment{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* Search dropdown must stay behind modal overlays. */
 .global-search-wrap{z-index:5}
+.receipt-template-editor{width:100%;min-height:360px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;line-height:1.5;white-space:pre;}
+.receipt-vars{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0;}
+.receipt-vars code{display:inline-block;padding:4px 7px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12px;}
