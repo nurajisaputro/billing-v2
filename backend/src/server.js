@@ -80,15 +80,39 @@ app.post('/api/users',asyncRoute(async(req,res)=>{
   catch(e){if(e.code==='ER_DUP_ENTRY')return res.status(409).json({error:'Username sudah digunakan.'});throw e}
 }));
 app.put('/api/users/:id',asyncRoute(async(req,res)=>{
-  const b=req.body,id=Number(req.params.id);
-  if(id===req.user.id&&b.active===false)return res.status(400).json({error:'Anda tidak dapat menonaktifkan akun sendiri.'});
+  const b=req.body,id=Number(req.params.id),name=String(b.name||'').trim(),username=String(b.username||'').trim(),password=String(b.password||'');
+  if(!Number.isInteger(id)||id<1)return res.status(400).json({error:'ID user tidak valid.'});
+  if(!name||!username)return res.status(400).json({error:'Nama dan username wajib diisi.'});
+  if(password&&password.length<8)return res.status(400).json({error:'Password minimal 8 karakter.'});
   if(!['superadmin','admin','kolektor'].includes(b.role))return res.status(400).json({error:'Role tidak valid.'});
-  const [[cnt]]=await pool.query("SELECT COUNT(*) total FROM users WHERE role='superadmin' AND active=1");
-  const [target]=await pool.execute('SELECT role,active FROM users WHERE id=?',[id]);
+  const [target]=await pool.execute('SELECT id,role,active FROM users WHERE id=?',[id]);
   if(!target.length)return res.status(404).json({error:'User tidak ditemukan.'});
   if(req.user.role==='admin'&&(b.role==='superadmin'||target[0].role==='superadmin'))return res.status(403).json({error:'Admin tidak dapat mengubah akun superadmin.'});
+  if(id===req.user.id&&b.active===false)return res.status(400).json({error:'Anda tidak dapat menonaktifkan akun sendiri.'});
+  const [[cnt]]=await pool.query("SELECT COUNT(*) total FROM users WHERE role='superadmin' AND active=1");
   if(target[0].role==='superadmin'&&target[0].active&&(b.role!=='superadmin'||b.active===false)&&Number(cnt.total)<=1)return res.status(400).json({error:'Minimal harus ada satu superadmin aktif.'});
-  await pool.execute('UPDATE users SET role=?,active=?,coverage_area_id=? WHERE id=?',[b.role,b.active===false?0:1,b.coverage_area_id||null,id]);for(const [token,u] of sessions)if(u.id===id)sessions.set(token,{...u,coverage_area_id:b.coverage_area_id||null});res.json({ok:true});
+  try{
+    if(password)await pool.execute('UPDATE users SET name=?,username=?,password_hash=?,role=?,active=?,coverage_area_id=? WHERE id=?',[name,username,hashPassword(password),b.role,b.active===false?0:1,b.coverage_area_id||null,id]);
+    else await pool.execute('UPDATE users SET name=?,username=?,role=?,active=?,coverage_area_id=? WHERE id=?',[name,username,b.role,b.active===false?0:1,b.coverage_area_id||null,id]);
+  }catch(e){if(e.code==='ER_DUP_ENTRY')return res.status(409).json({error:'Username sudah digunakan.'});throw e}
+  for(const [token,u] of sessions)if(u.id===id)sessions.set(token,{...u,name,username,role:b.role,coverage_area_id:b.coverage_area_id||null});
+  res.json({ok:true});
+}));
+app.delete('/api/users/:id',asyncRoute(async(req,res)=>{
+  const id=Number(req.params.id);
+  if(!Number.isInteger(id)||id<1)return res.status(400).json({error:'ID user tidak valid.'});
+  if(id===req.user.id)return res.status(400).json({error:'Anda tidak dapat menghapus akun sendiri.'});
+  const [target]=await pool.execute('SELECT id,username,role,active FROM users WHERE id=?',[id]);
+  if(!target.length)return res.status(404).json({error:'User tidak ditemukan.'});
+  if(req.user.role==='admin'&&target[0].role==='superadmin')return res.status(403).json({error:'Admin tidak dapat menghapus akun superadmin.'});
+  if(target[0].role==='superadmin'&&target[0].active){
+    const [[cnt]]=await pool.query("SELECT COUNT(*) total FROM users WHERE role='superadmin' AND active=1");
+    if(Number(cnt.total)<=1)return res.status(400).json({error:'Superadmin aktif terakhir tidak dapat dihapus.'});
+  }
+  await pool.execute('DELETE FROM users WHERE id=?',[id]);
+  for(const [token,u] of sessions)if(u.id===id)sessions.delete(token);
+  await logActivity('user_deleted','user',id,{username:target[0].username,role:target[0].role});
+  res.json({ok:true});
 }));
 app.get('/api/brand',asyncRoute(async(_req,res)=>{const [rows]=await pool.query('SELECT brand_name FROM app_settings WHERE id=1');res.json({brand_name:rows[0]?.brand_name||'BillingNet'})}));
 app.put('/api/brand',asyncRoute(async(req,res)=>{const name=String(req.body.brand_name||'').trim();if(!name)return res.status(400).json({error:'Nama brand wajib diisi.'});await pool.execute('UPDATE app_settings SET brand_name=? WHERE id=1',[name]);res.json({ok:true,brand_name:name})}));
