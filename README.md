@@ -127,6 +127,69 @@ Migrasi yang tersedia antara lain `migrate_bank_accounts.sql`, `migrate_package_
 - Scheduler memeriksa tagihan/isolir setiap menit dan kesehatan router setiap 120 detik. Pastikan hanya satu instance backend dengan scheduler aktif yang mengelola database produksi, kecuali mekanisme penguncian terdistribusi sudah diterapkan dan diuji.
 - Sesi login disimpan di memori backend, sehingga pengguna perlu login kembali setelah backend dimulai ulang.
 
+## Aplikasi Android (Capacitor)
+
+Frontend React/Vite dapat dibungkus menjadi aplikasi Android menggunakan Capacitor. Backend Node.js, MySQL, API, scheduler, dan koneksi MikroTik tetap berjalan di server.
+
+### Persiapan Android
+
+- Node.js 20 atau lebih baru.
+- Android Studio versi stabil, Android SDK, dan Android SDK Platform Tools.
+- JDK 21 untuk toolchain Android Capacitor 7.
+- URL HTTPS publik untuk API Billing. Jangan menaruh alamat `localhost` pada konfigurasi HP, karena localhost di Android menunjuk ke perangkat itu sendiri.
+
+### Konfigurasi API untuk Android
+
+Buat file `frontend/.env.production` (jangan commit file ini jika berisi alamat internal/rahasia) dengan isi:
+
+```env
+VITE_API_BASE_URL=https://billing.domain-anda.com
+```
+
+Nilai tersebut adalah origin/base URL server, tanpa akhiran `/api`. Backend harus dapat diakses dari jaringan HP melalui HTTPS dan mengizinkan origin Capacitor. Jangan memasukkan password, token, atau kredensial MikroTik ke frontend.
+
+### Membuat project Android pertama kali
+
+Jalankan PowerShell/Terminal:
+
+```powershell
+cd frontend
+npm install
+npm run android:add
+npm run android:sync
+npm run android:open
+```
+
+Perintah `android:add` membuat folder native `frontend/android` satu kali. Setelah folder Android dibuat, simpan folder tersebut ke Git agar konfigurasi native dan signing dapat dikelola bersama source. Jangan jalankan `android:add` berulang kali pada project yang sudah ada.
+
+Di Android Studio:
+1. Tunggu Gradle sync selesai dan pastikan Android SDK/JDK terpasang.
+2. Hubungkan HP dengan USB debugging atau jalankan emulator.
+3. Pilih perangkat, lalu tekan **Run** untuk instalasi pengujian.
+4. Untuk APK, pilih **Build > Build Bundle(s) / APK(s) > Build APK(s)**.
+5. Untuk distribusi Play Store, gunakan **Build > Generate Signed Bundle / APK** dan pilih Android App Bundle (AAB). Simpan keystore dan password signing di tempat aman, jangan commit ke Git.
+
+### Update aplikasi Android setelah perubahan frontend
+
+```powershell
+cd frontend
+npm install
+npm run android:sync
+npm run android:open
+```
+
+Lalu jalankan ulang dari Android Studio atau buat APK/AAB release. Jika hanya mengubah API/backend, deploy backend ke server; APK tidak harus dibangun ulang kecuali ada perubahan frontend/native atau konfigurasi API.
+
+### Catatan keamanan dan pengujian
+
+- Gunakan HTTPS dengan sertifikat valid. Jangan mengaktifkan cleartext HTTP untuk produksi.
+- API harus dapat diakses dari jaringan seluler/Wi-Fi perangkat.
+- Uji login dan akses seluruh role: superadmin, admin, dan kolektor.
+- Uji daftar pelanggan/tagihan, input pembayaran, cetak bukti, dan logout.
+- Uji tindakan berisiko seperti isolir hanya pada pelanggan uji.
+- Scheduler billing/isolir tetap berjalan di backend; jangan menjalankan scheduler kedua dari Android.
+- Folder `android/` dihasilkan oleh Capacitor. Buat dan commit folder tersebut setelah proses `android:add` berhasil pada komputer pengembang.
+
 ## Kontribusi
 
 Laporan masalah (issue) dan pull request dipersilakan sesuai ketentuan lisensi repository. Sertakan versi Node.js, MySQL, dan RouterOS, langkah untuk mengulangi masalah, log yang sudah disamarkan, serta hasil yang diharapkan.
