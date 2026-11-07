@@ -1,0 +1,12 @@
+USE billing_rwnet;
+CREATE TABLE IF NOT EXISTS coverage_areas (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ name VARCHAR(120) NOT NULL UNIQUE,
+ description VARCHAR(255) NULL,
+ active TINYINT(1) NOT NULL DEFAULT 1,
+ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+ALTER TABLE users ADD COLUMN coverage_area_id BIGINT UNSIGNED NULL, ADD CONSTRAINT fk_user_coverage_area FOREIGN KEY (coverage_area_id) REFERENCES coverage_areas(id) ON DELETE SET NULL;
+ALTER TABLE customers ADD COLUMN coverage_area_id BIGINT UNSIGNED NULL, ADD CONSTRAINT fk_customer_coverage_area FOREIGN KEY (coverage_area_id) REFERENCES coverage_areas(id) ON DELETE SET NULL;
+CREATE INDEX idx_customer_coverage_area ON customers (coverage_area_id);
