@@ -1,10 +1,12 @@
+const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+
 export async function api(path, options = {}) {
   const token = localStorage.getItem('billing_token');
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   if (token && (!path.startsWith('/auth/') || path === '/auth/logout')) headers.Authorization = `Bearer ${token}`;
   let response;
   try {
-    response = await fetch(`/api${path}`, { ...options, headers });
+    response = await fetch(`${API_BASE_URL}/api${path}`, { ...options, headers });
   } catch (error) {
     throw new Error('Backend tidak dapat dihubungi. Periksa koneksi server.');
   }
