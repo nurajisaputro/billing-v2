@@ -110,7 +110,11 @@ Pada instalasi baru, halaman login menyediakan penyiapan superadmin pertama sela
 - **Peningkatan dari database lama:** buat cadangan database terlebih dahulu, kemudian jalankan hanya migrasi yang belum diterapkan dan sesuai dengan versi database Anda.
 - Jangan menjalankan seluruh berkas migrasi secara membabi buta. Periksa struktur database dan petunjuk pada setiap migrasi sebelum menerapkannya.
 
-Migrasi yang tersedia antara lain `migrate_bank_accounts.sql`, `migrate_package_router.sql`, `migrate_multi_role_assets.sql`, `migrate_customer_billing_collector.sql`, `migrate_billing_windows_customer_status.sql`, dan `migrate_invoice_nunggak.sql`, dan `migrate_customer_import_metadata.sql`.
+Migrasi yang tersedia antara lain `migrate_bank_accounts.sql`, `migrate_package_router.sql`, `migrate_multi_role_assets.sql`, `migrate_customer_billing_collector.sql`, `migrate_billing_windows_customer_status.sql`, dan `migrate_invoice_nunggak.sql`, `migrate_customer_import_metadata.sql`, dan `migrate_coverage_area.sql`.
+
+
+
+Fitur tambahan: tagihan dapat dicetak ke printer thermal 58 mm dari menu Tagihan. Coverage Area dapat dikelola melalui menu Coverage Area; user dapat memilih wilayahnya sendiri melalui Profile, dan pelanggan dapat diberi area saat ditambah atau diedit. Pelanggan hasil import CSV otomatis mengikuti Coverage Area user yang sedang login jika area tersebut sudah dipilih.
 
 ## Integrasi MikroTik
 
