@@ -180,7 +180,7 @@ app.post('/api/customers/import', asyncRoute(async(req,res)=>{
 
 app.get('/api/customers/:id/details', asyncRoute(async(req,res)=>{
   const id=Number(req.params.id); if(!Number.isInteger(id)||id<1)return res.status(400).json({error:'ID pelanggan tidak valid.'});
-  const [customers]=await pool.execute(`SELECT c.*,p.name package_name,p.price package_price,r.name router_name,r.host router_host,u.name collector_name FROM customers c LEFT JOIN packages p ON p.id=c.package_id LEFT JOIN routers r ON r.id=c.router_id LEFT JOIN users u ON u.id=c.collector_id WHERE c.id=?`,[id]);
+  const [customers]=await pool.execute(`SELECT c.*,p.name package_name,p.price package_price,r.name router_name,r.host router_host,u.name collector_name,ca.name coverage_area_name FROM customers c LEFT JOIN packages p ON p.id=c.package_id LEFT JOIN routers r ON r.id=c.router_id LEFT JOIN users u ON u.id=c.collector_id LEFT JOIN coverage_areas ca ON ca.id=c.coverage_area_id WHERE c.id=?`,[id]);
   if(!customers.length)return res.status(404).json({error:'Pelanggan tidak ditemukan.'});
   const [payments]=await pool.execute(`SELECT pay.id,pay.receipt_number,pay.amount,pay.method,pay.paid_at,pay.reference_number,i.invoice_number,i.period_start,i.period_end FROM payments pay JOIN invoices i ON i.id=pay.invoice_id WHERE i.customer_id=? ORDER BY pay.paid_at DESC,pay.id DESC LIMIT 1`,[id]);
   const [activeInvoices]=await pool.execute(`SELECT id,invoice_number,period_start,period_end,due_date,amount,paid_amount,status FROM invoices WHERE customer_id=? AND status IN ('unpaid','partial') ORDER BY due_date ASC,id DESC`,[id]);
