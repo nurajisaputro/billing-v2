@@ -140,6 +140,84 @@ npm run build
 
 Hasil build ada di `frontend\dist`. Sajikan folder ini dengan web server yang dikonfigurasi untuk SPA fallback dan proxy `/api` ke backend.
 
+## Update aplikasi dari GitHub (Windows)
+
+Panduan ini untuk instalasi yang sudah di-clone ke `C:\\BillingRTNet` dan menggunakan branch `main`.
+
+### 1. Backup dan periksa repository
+
+Buka PowerShell:
+
+```powershell
+cd C:\\BillingRTNet
+git status
+git branch --show-current
+git rev-parse HEAD
+New-Item -ItemType Directory -Force C:\\BillingBackup | Out-Null
+mysqldump -h 127.0.0.1 -u billing_app -p --single-transaction billing_rwnet > C:\\BillingBackup\\billing_rwnet-$(Get-Date -Format 'yyyyMMdd-HHmm').sql
+Copy-Item .\\backend\\.env C:\\BillingBackup\\backend.env
+```
+
+Pastikan branch adalah `main`. Simpan backup database dan `.env` di tempat aman di luar repository. Jangan unggah file rahasia atau data pelanggan ke GitHub.
+
+### 2. Hentikan backend
+
+Pada jendela PowerShell backend, tekan `Ctrl+C`. Jika berjalan sebagai Windows Service atau Task Scheduler, hentikan melalui pengelolanya. Pastikan tidak ada dua instance backend dengan scheduler aktif.
+
+### 3. Ambil perubahan terbaru
+
+```powershell
+git fetch origin
+git pull --ff-only origin main
+```
+
+Jika Git menolak karena local changes, hentikan proses, periksa `git status`, lalu backup dan commit/stash perubahan secara sadar. Jangan gunakan `git reset --hard` untuk memaksa update.
+
+### 4. Instal dependency dan build frontend
+
+```powershell
+cd C:\\BillingRTNet\\backend
+npm install
+
+cd C:\\BillingRTNet\\frontend
+npm install
+npm run build
+```
+
+Jika tersedia `package-lock.json` dan Anda menginginkan instalasi deterministik, gunakan `npm ci` sebagai pengganti `npm install`.
+
+### 5. Periksa migrasi database
+
+Periksa README/catatan rilis serta file `backend/sql/migrate_*.sql` yang baru atau berubah. Jalankan hanya migrasi yang belum diterapkan dan sesuai versi database:
+
+```powershell
+Get-Content .\\backend\\sql\\NAMA_MIGRASI.sql | mysql -h 127.0.0.1 -u billing_app -p billing_rwnet
+```
+
+Ganti dengan nama file yang benar. **Jangan impor ulang `schema.sql` ke database produksi** dan jangan menjalankan semua migrasi tanpa memeriksa isinya.
+
+### 6. Jalankan backend dan verifikasi
+
+```powershell
+cd C:\\BillingRTNet\\backend
+npm start
+```
+
+Biarkan terminal backend tetap berjalan. Dari PowerShell lain, periksa:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:3000/api/health
+```
+
+Frontend produksi ada di `frontend\\dist`. Pastikan web server menyajikan folder build terbaru dan meneruskan `/api` ke backend. Refresh browser dengan `Ctrl+F5`. Uji login, pelanggan, tagihan bulan berjalan, pembayaran, cetak bukti, dan koneksi MikroTik. Uji isolir hanya pada pelanggan percobaan.
+
+### Troubleshooting update
+
+- Jika Git menolak karena perubahan lokal, jangan reset paksa; backup dan tinjau perubahan dahulu.
+- Jika backend gagal start, periksa error terminal dan `backend\\.env`.
+- Jika build gagal, periksa pesan npm/Vite sebelum menghapus cache atau lock file.
+- Catat commit SHA sebelum update untuk referensi rollback. Jika migrasi database sudah berjalan, rollback source saja mungkin tidak kompatibel; pulihkan database hanya dari backup valid setelah menilai dampaknya.
+
 ## 10. Backup dan update
 
 - Backup database dari MySQL Workbench atau `mysqldump` secara berkala.
