@@ -163,8 +163,8 @@ app.post('/api/customers/import', asyncRoute(async(req,res)=>{
       if(!['internet','tv_cable','bundle'].includes(row.service_type)){errors.push(`Baris ${line}: layanan wajib diisi dengan internet, tv_cable, atau bundle.`);continue;}
       if(packageName&&!pkg){errors.push(`Baris ${line}: paket "${packageName}" tidak ditemukan.`);continue;}
       if(pkg&&pkg.service_type!==service&&pkg.service_type!=='bundle'&&service!=='bundle'){errors.push(`Baris ${line}: layanan tidak sesuai dengan paket "${packageName}".`);continue;}
-      const code=`IMP-${Date.now().toString(36).toUpperCase()}-${index+1}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
-      await conn.execute(`INSERT INTO customers (customer_code,name,phone,address,service_type,package_id,router_id,billing_day,active,skip_mass_isolation,isolation_enabled) VALUES (?,?,?,?,?,?,?,1,1,0,1)`,[code,name,String(row.phone||'').trim()||null,String(row.address||'').trim()||null,service,pkg?.id||null,service==='tv_cable'?null:(pkg?.router_id||null)]);
+      const code=`PLG-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+      await conn.execute(`INSERT INTO customers (customer_code,name,phone,address,service_type,package_id,router_id,billing_day,active,skip_mass_isolation,isolation_enabled,imported_at) VALUES (?,?,?,?,?,?,?,1,1,0,1,NOW())`,[code,name,String(row.phone||'').trim()||null,String(row.address||'').trim()||null,service,pkg?.id||null,service==='tv_cable'?null:(pkg?.router_id||null)]);
       imported++;
     }
     await conn.commit();
@@ -329,6 +329,15 @@ app.delete('/api/routers/:id', asyncRoute(async(req,res)=>{
 
 app.post('/api/routers/:id/test', asyncRoute(async(req,res)=>res.json(await testRouter(req.params.id))));
 app.post('/api/routers/:id/use-kv-isolir', asyncRoute(async(req,res)=>res.json(await configureKvIsolirProfile(req.params.id))));
+app.get('/api/routers/:id/ppp-secrets/search', asyncRoute(async(req,res)=>{
+  const query=String(req.query.q||'').trim();
+  if(query.length<2)return res.json({secrets:[]});
+  const secrets=await listPppSecrets(req.params.id);
+  const needle=query.toLowerCase();
+  const matches=secrets.filter(secret=>String(secret.name||'').toLowerCase().includes(needle)).slice(0,15)
+    .map(secret=>({name:secret.name,profile:secret.profile||'',service:secret.service||'',disabled:String(secret.disabled||'false')==='true'}));
+  res.json({secrets:matches});
+}));
 app.get('/api/routers/:id/ppp-secrets', asyncRoute(async(req,res)=>res.json(await listPppSecrets(req.params.id))));
 
 app.get('/api/invoices', asyncRoute(async(_req,res)=>{const [rows]=await pool.query(`SELECT i.*,DATE_FORMAT(i.period_start,'%Y-%m') AS period_month,c.customer_code,c.name customer_name,c.phone FROM invoices i JOIN customers c ON c.id=i.customer_id ORDER BY i.due_date DESC,i.id DESC LIMIT 1000`);res.json(rows);}));
