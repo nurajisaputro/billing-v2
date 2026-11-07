@@ -259,6 +259,78 @@ mysqldump -h 127.0.0.1 -u billing_app -p billing_rwnet > billing_rwnet-$(date +%
 
 Simpan backup di lokasi terpisah dan terlindungi. Backup `.env`/kunci enkripsi secara aman dan uji restore secara berkala. Jangan simpan dump database atau `.env` di repository GitHub.
 
+## Update aplikasi dari GitHub (Ubuntu Server)
+
+Panduan ini untuk instalasi yang sudah berjalan dari GitHub pada branch `main`. Lakukan saat maintenance.
+
+### 1. Backup dan periksa repository
+
+```bash
+cd /opt/billing-rwnet
+git status
+git branch --show-current
+git rev-parse HEAD
+mkdir -p ~/backup-billing
+mysqldump -h 127.0.0.1 -u billing_app -p --single-transaction billing_rwnet > ~/backup-billing/billing_rwnet-$(date +%F-%H%M).sql
+cp backend/.env ~/backup-billing/backend.env-$(date +%F-%H%M)
+```
+
+Pastikan branch adalah `main`. Simpan backup database, `.env`, dan kunci enkripsi di lokasi aman di luar repository. Jangan unggah file rahasia atau data pelanggan ke GitHub.
+
+### 2. Ambil perubahan terbaru
+
+Jalankan sebagai akun yang memiliki folder repository dan autentikasi GitHub (bukan root jika repository dimiliki akun deployment):
+
+```bash
+git fetch origin
+git pull --ff-only origin main
+```
+
+Jika Git menolak karena perubahan lokal, hentikan proses. Periksa `git status`, backup perubahan tersebut, lalu commit atau stash secara sadar. Jangan gunakan `git reset --hard` atau `git clean -fd` untuk memaksa update.
+
+### 3. Instal dependency dan build frontend
+
+```bash
+cd /opt/billing-rwnet/backend
+npm install
+
+cd /opt/billing-rwnet/frontend
+npm install
+npm run build
+```
+
+Jika lock file `package-lock.json` tersedia dan ingin instalasi deterministik, gunakan `npm ci` sebagai pengganti `npm install`.
+
+### 4. Periksa migrasi database
+
+Baca README/catatan rilis dan periksa file `backend/sql/migrate_*.sql` yang baru atau berubah. Jalankan hanya migrasi yang belum diterapkan dan sesuai versi database:
+
+```bash
+mysql -h 127.0.0.1 -u billing_app -p billing_rwnet < backend/sql/NAMA_MIGRASI.sql
+```
+
+Ganti dengan nama file migrasi yang benar. **Jangan jalankan ulang `schema.sql` pada database produksi** dan jangan menjalankan semua migrasi sekaligus tanpa memeriksa isinya. Pastikan backup tersedia sebelum mengubah skema.
+
+### 5. Restart dan verifikasi
+
+```bash
+sudo systemctl restart billing-rwnet
+sudo systemctl status billing-rwnet --no-pager
+sudo journalctl -u billing-rwnet -n 100 --no-pager
+curl http://127.0.0.1:3000/api/health
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Nginx menyajikan hasil build di `frontend/dist`. Uji login, pelanggan, tagihan bulan berjalan, pembayaran, cetak bukti, dan koneksi MikroTik. Uji isolir hanya pada pelanggan percobaan. Pastikan hanya satu instance backend dengan scheduler aktif.
+
+### Troubleshooting update
+
+- Jika `git pull` gagal karena perubahan lokal, jangan reset paksa; backup dan tinjau perubahan dahulu.
+- Jika backend gagal, periksa `journalctl -u billing-rwnet -n 150 --no-pager` dan `backend/.env`.
+- Jika build gagal, baca error npm/Vite sebelum menghapus cache atau lock file.
+- Catat commit SHA sebelum update untuk referensi rollback. Jika migrasi database sudah berjalan, rollback source saja mungkin tidak kompatibel; pulihkan database hanya dari backup valid setelah menilai dampaknya.
+
 ## Upgrade versi
 
 1. Jadwalkan maintenance dan backup database serta folder `.env`.
