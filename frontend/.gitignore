@@ -37,3 +37,19 @@ typings/
 
 # Yarn Integrity file
 .yarn-integrity
+
+# Local environment files (keep the documented example files)
+.env
+.env.*
+!.env.example
+!.env.android.example
+
+# Capacitor / Android generated build files
+/android/local.properties
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/captures/
+/android/*.jks
+/android/*.keystore
+/android/keystore.properties
