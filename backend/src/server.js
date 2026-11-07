@@ -17,7 +17,7 @@ const sessions = new Map();
 const roleAccess = {
   superadmin: () => true,
   admin: (path, method) => !path.startsWith('/settings') && !path.startsWith('/brand') && (!path.startsWith('/routers') || method === 'GET'),
-  kolektor: (path, method) => (path === '/receipt-template' && method === 'GET') || path.startsWith('/customers') || path.startsWith('/invoices') || path.startsWith('/payments') || path.startsWith('/reports/monthly') || path.startsWith('/profile') || (path === '/brand' && method === 'GET') || (['/bank-accounts','/packages','/routers'].includes(path) && method === 'GET') || (/^\/routers\/\d+\/ppp-profiles$/.test(path) && method === 'GET')
+  kolektor: (path, method) => (path === '/receipt-template' && method === 'GET') || path.startsWith('/customers') || path.startsWith('/invoices') || path.startsWith('/payments') || path.startsWith('/reports/monthly') || path.startsWith('/profile') || (path === '/brand' && method === 'GET') || (['\/bank-accounts','\/packages','\/routers','\/coverage-areas'].includes(path) && method === 'GET') || (/^\/routers\/\d+\/ppp-profiles$/.test(path) && method === 'GET')
 };
 function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
   return `${salt}:${crypto.scryptSync(String(password), salt, 64).toString('hex')}`;
