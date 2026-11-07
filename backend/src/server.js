@@ -58,13 +58,14 @@ app.post('/api/auth/login', asyncRoute(async (req,res) => {
 app.post('/api/auth/logout',(req,res)=>{sessions.delete(String(req.headers.authorization||'').replace(/^Bearer\s+/i,''));res.json({ok:true})});
 app.get('/api/profile',(req,res)=>res.json(req.user));
 app.put('/api/profile',asyncRoute(async(req,res)=>{
-  const name=String(req.body.name||'').trim(), password=String(req.body.password||'');
+  const name=String(req.body.name||'').trim(), password=String(req.body.password||''), coverageAreaId=req.body.coverage_area_id?Number(req.body.coverage_area_id):null;
   if(!name)return res.status(400).json({error:'Nama wajib diisi.'});
   if(password&&password.length<8)return res.status(400).json({error:'Password baru minimal 8 karakter.'});
-  if(password)await pool.execute('UPDATE users SET name=?,password_hash=? WHERE id=?',[name,hashPassword(password),req.user.id]);
-  else await pool.execute('UPDATE users SET name=? WHERE id=?',[name,req.user.id]);
-  for(const [token,u] of sessions)if(u.id===req.user.id)sessions.set(token,{...u,name});
-  res.json({ok:true,name});
+  if(coverageAreaId){const [area]=await pool.execute('SELECT id FROM coverage_areas WHERE id=? AND active=1',[coverageAreaId]);if(!area.length)return res.status(400).json({error:'Coverage area tidak ditemukan atau nonaktif.'});}
+  if(password)await pool.execute('UPDATE users SET name=?,password_hash=?,coverage_area_id=? WHERE id=?',[name,hashPassword(password),coverageAreaId,req.user.id]);
+  else await pool.execute('UPDATE users SET name=?,coverage_area_id=? WHERE id=?',[name,coverageAreaId,req.user.id]);
+  for(const [token,u] of sessions)if(u.id===req.user.id)sessions.set(token,{...u,name,coverage_area_id:coverageAreaId});
+  res.json({ok:true,name,coverage_area_id:coverageAreaId});
 }));
 app.get('/api/coverage-areas',asyncRoute(async(_req,res)=>{const [rows]=await pool.query('SELECT id,name,description,active,created_at FROM coverage_areas ORDER BY name');res.json(rows)}));
 app.post('/api/coverage-areas',asyncRoute(async(req,res)=>{const name=String(req.body.name||'').trim(),description=String(req.body.description||'').trim()||null;if(!name)return res.status(400).json({error:'Nama area wajib diisi.'});try{const [r]=await pool.execute('INSERT INTO coverage_areas (name,description) VALUES (?,?)',[name,description]);res.status(201).json({id:r.insertId})}catch(e){if(e.code==='ER_DUP_ENTRY')return res.status(409).json({error:'Nama area sudah digunakan.'});throw e}}));
