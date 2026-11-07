@@ -38,6 +38,7 @@ Pilih panduan yang sesuai dengan sistem operasi:
 - [Panduan instalasi Ubuntu Server](docs/INSTALL_UBUNTU.md)
 - [Panduan instalasi Windows](docs/INSTALL_WINDOWS.md)
 - [Struktur folder project](docs/STRUKTUR_FOLDER.md)
+- [Panduan build aplikasi Android (Capacitor)](docs/ANDROID_CAPACITOR.md)
 - [Keamanan dan batasan sebelum penggunaan produksi](SECURITY.md)
 
 ### Menjalankan untuk pengembangan lokal
