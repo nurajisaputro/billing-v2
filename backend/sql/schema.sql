@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS customers (
   isolation_status ENUM('not_isolated','isolated','pending','error') NOT NULL DEFAULT 'not_isolated',
   customer_status ENUM('active','suspended','terminated') NOT NULL DEFAULT 'active',
   notes TEXT NULL,
+  imported_at DATETIME NULL DEFAULT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_customer_package FOREIGN KEY (package_id) REFERENCES packages(id) ON DELETE SET NULL,
