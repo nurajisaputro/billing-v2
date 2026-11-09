@@ -166,12 +166,14 @@ app.get('/api/dashboard/isolation-status', asyncRoute(async (_req, res) => {
   res.json(await getKvIsolirStatus());
 }));
 
-app.get('/api/customers', asyncRoute(async (_req, res) => {
-  const [rows] = await pool.query(`SELECT c.*, p.name package_name, p.price package_price, r.name router_name, r.host router_host, p.router_id package_router_id, u.name collector_name, ca.name coverage_area_name,
+app.get('/api/customers', asyncRoute(async (req, res) => {
+  const sql = `SELECT c.*, p.name package_name, p.price package_price, r.name router_name, r.host router_host, p.router_id package_router_id, u.name collector_name, ca.name coverage_area_name,
       COALESCE(c.invoice_day_override,bs.invoice_generation_day) invoice_day_effective, COALESCE(c.payment_start_day_override,bs.payment_start_day) payment_start_day_effective,
       COALESCE(c.payment_end_day_override,bs.payment_end_day) payment_end_day_effective, COALESCE(c.grace_days_override,NULLIF(c.due_grace_days,0),bs.grace_days) grace_days_effective,
       COALESCE(c.isolation_time_override,bs.isolation_time) isolation_time_effective
-    FROM customers c LEFT JOIN packages p ON p.id=c.package_id LEFT JOIN routers r ON r.id=c.router_id LEFT JOIN users u ON u.id=c.collector_id LEFT JOIN coverage_areas ca ON ca.id=c.coverage_area_id CROSS JOIN billing_settings bs WHERE bs.id=1 ORDER BY c.id DESC`);
+    FROM customers c LEFT JOIN packages p ON p.id=c.package_id LEFT JOIN routers r ON r.id=c.router_id LEFT JOIN users u ON u.id=c.collector_id LEFT JOIN coverage_areas ca ON ca.id=c.coverage_area_id CROSS JOIN billing_settings bs
+    WHERE bs.id=1 ${req.user.role==='kolektor'?'AND c.collector_id=?':''} ORDER BY c.id DESC`;
+  const [rows] = req.user.role==='kolektor' ? await pool.execute(sql,[req.user.id]) : await pool.query(sql);
   res.json(rows);
 }));
 
@@ -204,7 +206,7 @@ app.post('/api/customers/import', asyncRoute(async(req,res)=>{
 
 app.get('/api/customers/:id/details', asyncRoute(async(req,res)=>{
   const id=Number(req.params.id); if(!Number.isInteger(id)||id<1)return res.status(400).json({error:'ID pelanggan tidak valid.'});
-  const [customers]=await pool.execute(`SELECT c.*,p.name package_name,p.price package_price,r.name router_name,r.host router_host,u.name collector_name,ca.name coverage_area_name FROM customers c LEFT JOIN packages p ON p.id=c.package_id LEFT JOIN routers r ON r.id=c.router_id LEFT JOIN users u ON u.id=c.collector_id LEFT JOIN coverage_areas ca ON ca.id=c.coverage_area_id WHERE c.id=?`,[id]);
+  const [customers]=await pool.execute(`SELECT c.*,p.name package_name,p.price package_price,r.name router_name,r.host router_host,u.name collector_name,ca.name coverage_area_name FROM customers c LEFT JOIN packages p ON p.id=c.package_id LEFT JOIN routers r ON r.id=c.router_id LEFT JOIN users u ON u.id=c.collector_id LEFT JOIN coverage_areas ca ON ca.id=c.coverage_area_id WHERE c.id=? ${req.user.role==='kolektor'?'AND c.collector_id=?':''}`,req.user.role==='kolektor'?[id,req.user.id]:[id]);
   if(!customers.length)return res.status(404).json({error:'Pelanggan tidak ditemukan.'});
   const [payments]=await pool.execute(`SELECT pay.id,pay.receipt_number,pay.amount,pay.method,pay.paid_at,pay.reference_number,i.invoice_number,i.period_start,i.period_end FROM payments pay JOIN invoices i ON i.id=pay.invoice_id WHERE i.customer_id=? ORDER BY pay.paid_at DESC,pay.id DESC LIMIT 1`,[id]);
   const [activeInvoices]=await pool.execute(`SELECT id,invoice_number,period_start,period_end,due_date,amount,paid_amount,status FROM invoices WHERE customer_id=? AND status IN ('unpaid','partial') ORDER BY due_date ASC,id DESC`,[id]);
@@ -370,7 +372,7 @@ app.get('/api/routers/:id/ppp-secrets/search', asyncRoute(async(req,res)=>{
 }));
 app.get('/api/routers/:id/ppp-secrets', asyncRoute(async(req,res)=>res.json(await listPppSecrets(req.params.id))));
 
-app.get('/api/invoices', asyncRoute(async(_req,res)=>{const [rows]=await pool.query(`SELECT i.*,DATE_FORMAT(i.period_start,'%Y-%m') AS period_month,c.customer_code,c.name customer_name,c.phone FROM invoices i JOIN customers c ON c.id=i.customer_id ORDER BY i.due_date DESC,i.id DESC LIMIT 1000`);res.json(rows);}));
+app.get('/api/invoices', asyncRoute(async(req,res)=>{const sql=`SELECT i.*,DATE_FORMAT(i.period_start,'%Y-%m') AS period_month,c.customer_code,c.name customer_name,c.phone FROM invoices i JOIN customers c ON c.id=i.customer_id ${req.user.role==='kolektor'?'WHERE c.collector_id=?':''} ORDER BY i.due_date DESC,i.id DESC LIMIT 1000`;const [rows]=req.user.role==='kolektor'?await pool.execute(sql,[req.user.id]):await pool.query(sql);res.json(rows);}));
 
 app.put('/api/invoices/:id/nunggak', asyncRoute(async(req,res)=>{
   const id=Number(req.params.id); const skip=req.body?.skip===false?0:1;
