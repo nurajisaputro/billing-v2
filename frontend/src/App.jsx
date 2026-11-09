@@ -247,7 +247,7 @@ function App(){
  function login(result){localStorage.setItem('billing_token',result.token);localStorage.setItem('billing_user',JSON.stringify(result.user));setAuth({...result,setUser:u=>{setAuth(a=>({...a,user:u}));localStorage.setItem('billing_user',JSON.stringify(u))}})}
  async function logout(){try{await api('/auth/logout',{method:'POST'})}catch{}localStorage.removeItem('billing_token');localStorage.removeItem('billing_user');setAuth(null)}
  if(!auth)return <LoginPage brand={brand} onLogin={login}/>;
- const mobileAuth={{...auth,setUser:u=>{setAuth(a=>({...a,user:u}));localStorage.setItem('billing_user',JSON.stringify(u))}}};
+ const mobileAuth={...auth,setUser:u=>{setAuth(a=>({...a,user:u}));localStorage.setItem('billing_user',JSON.stringify(u))}};
  return Capacitor.isNativePlatform() ? <MobileBillingApp key={auth.user.id} auth={mobileAuth} onLogout={logout}/> : <BillingApp key={auth.user.id} auth={mobileAuth} onLogout={logout}/>;
 }
 export default App;
