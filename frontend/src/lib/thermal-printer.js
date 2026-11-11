@@ -63,8 +63,29 @@ export async function disconnectThermalPrinter() {
 
 export async function printThermalText(value) {
   const saved = getSavedThermalPrinter();
-  const hashKey = activeHashKey || saved?.hashKey;
-  if (!hashKey) throw new Error('Printer belum terhubung. Hubungkan printer dari beranda.');
+  if (!saved?.address) throw new Error('Printer belum dipilih. Hubungkan printer dari beranda.');
+  let hashKey = activeHashKey || saved.hashKey;
+  let connected = false;
+  if (hashKey) {
+    try { connected = (await EscPosPrinter.isPrinterConnected({ hashKey })).value; } catch { connected = false; }
+  }
+  if (!connected) {
+    try {
+      await EscPosPrinter.connectPrinter({ hashKey });
+      connected = true;
+    } catch {
+      const created = await EscPosPrinter.createPrinter({
+        connectionType: PrinterConnectionType.Bluetooth,
+        address: saved.address
+      });
+      hashKey = created.value;
+      if (!hashKey) throw new Error('Tidak dapat membuat koneksi printer baru.');
+      await EscPosPrinter.connectPrinter({ hashKey });
+      activeHashKey = hashKey;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...saved, hashKey, connected: true }));
+      connected = true;
+    }
+  }
   activeHashKey = hashKey;
   const bytes = [0x1b, 0x40, ...Array.from(new TextEncoder().encode(String(value))), 0x0a, 0x0a, 0x0a];
   await EscPosPrinter.sendToPrinter({ hashKey, data: bytes, waitingTime: 1200 });
