@@ -8,16 +8,19 @@ const frontend = path.resolve(here, '..');
 const androidRes = path.join(frontend, 'android', 'app', 'src', 'main', 'res');
 const source = path.join(frontend, 'public', 'noble-media-icon.svg');
 const sizes = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 };
+const foregroundSizes = { mdpi: 108, hdpi: 162, xhdpi: 216, xxhdpi: 324, xxxhdpi: 432 };
 
 await fs.access(source);
 const svg = await fs.readFile(source);
 for (const [density, size] of Object.entries(sizes)) {
   const dir = path.join(androidRes, `mipmap-${density}`);
   await fs.mkdir(dir, { recursive: true });
-  for (const name of ['ic_launcher', 'ic_launcher_round', 'ic_launcher_foreground']) {
-    await sharp(svg).resize(size, size, { fit: 'contain', background: { r: 15, g: 23, b: 42, alpha: 0 } })
+  for (const name of ['ic_launcher', 'ic_launcher_round']) {
+    await sharp(svg).resize(size, size, { fit: 'contain', background: { r: 15, g: 23, b: 42, alpha: 1 } })
       .png().toFile(path.join(dir, `${name}.png`));
   }
+  await sharp(svg).resize(foregroundSizes[density], foregroundSizes[density], { fit: 'contain', background: { r: 15, g: 23, b: 42, alpha: 0 } })
+    .png().toFile(path.join(dir, 'ic_launcher_foreground.png'));
 }
 const adaptiveDir = path.join(androidRes, 'mipmap-anydpi-v26');
 await fs.mkdir(adaptiveDir, { recursive: true });
