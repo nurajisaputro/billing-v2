@@ -9,7 +9,8 @@
     "preview": "vite preview --host 0.0.0.0",
     "android:add": "npx cap add android",
     "android:sync": "npm run build && npx cap sync android",
-    "android:open": "npx cap open android"
+    "android:open": "npx cap open android",
+    "android:icons": "node scripts/generate-android-icons.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",
@@ -22,6 +23,7 @@
     "@fedejm/capacitor-esc-pos-printer": "^0.2.4"
   },
   "devDependencies": {
-    "@capacitor/cli": "^7.4.3"
+    "@capacitor/cli": "^7.4.3",
+    "sharp": "^0.34.5"
   }
 }
