@@ -12,7 +12,7 @@ APP_FORCE_UPDATE=false
 APP_RELEASE_NOTES=Perbaikan cetak 58mm dan nama petugas.
 ```
 
-- `APP_VERSION_CODE` harus selalu lebih besar dari versi APK yang sebelumnya dibagikan.
+- `APP_VERSION_CODE` harus selalu lebih besar dari versi APK yang sebelumnya dibagikan. Naikkan juga nilai `versionCode` dan `versionName` di `android/app/build.gradle` (atau `build.gradle.kts`) sebelum build.
 - Upload APK hasil release ke lokasi HTTPS yang sama dengan `APP_APK_URL`.
 - APK baru wajib memakai `applicationId` yang sama dan ditandatangani dengan keystore/release key yang sama. Simpan keystore dan password-nya dengan aman.
 - Untuk update wajib, ubah `APP_FORCE_UPDATE=true`; untuk update biasa gunakan `false`.
@@ -20,9 +20,12 @@ APP_RELEASE_NOTES=Perbaikan cetak 58mm dan nama petugas.
 
 ## Build dan rilis
 
-Dari folder `frontend`:
+Atur alamat backend yang dipakai APK saat build (ganti dengan domain backend Anda), lalu dari folder `frontend`:
 
 ```bash
+# Windows PowerShell
+$env:VITE_API_BASE_URL="https://billing.domain-anda.com"
+# Linux/macOS: export VITE_API_BASE_URL=https://billing.domain-anda.com
 npm install
 npm run android:sync
 ```
