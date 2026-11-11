@@ -372,7 +372,7 @@ app.get('/api/routers/:id/ppp-secrets/search', asyncRoute(async(req,res)=>{
 }));
 app.get('/api/routers/:id/ppp-secrets', asyncRoute(async(req,res)=>res.json(await listPppSecrets(req.params.id))));
 
-app.get('/api/invoices', asyncRoute(async(req,res)=>{const sql=`SELECT i.*,DATE_FORMAT(i.period_start,'%Y-%m') AS period_month,c.customer_code,c.name customer_name,c.phone FROM invoices i JOIN customers c ON c.id=i.customer_id ${req.user.role==='kolektor'?'WHERE c.collector_id=?':''} ORDER BY i.due_date DESC,i.id DESC LIMIT 1000`;const [rows]=req.user.role==='kolektor'?await pool.execute(sql,[req.user.id]):await pool.query(sql);res.json(rows);}));
+app.get('/api/invoices', asyncRoute(async(req,res)=>{const sql=`SELECT i.*,DATE_FORMAT(i.period_start,'%Y-%m') AS period_month,c.customer_code,c.name customer_name,c.phone,c.address FROM invoices i JOIN customers c ON c.id=i.customer_id ${req.user.role==='kolektor'?'WHERE c.collector_id=?':''} ORDER BY i.due_date DESC,i.id DESC LIMIT 1000`;const [rows]=req.user.role==='kolektor'?await pool.execute(sql,[req.user.id]):await pool.query(sql);res.json(rows);}));
 
 app.put('/api/invoices/:id/nunggak', asyncRoute(async(req,res)=>{
   const id=Number(req.params.id); const skip=req.body?.skip===false?0:1;
