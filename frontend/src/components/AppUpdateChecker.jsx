@@ -3,7 +3,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
 import { Capacitor } from '@capacitor/core';
 
-const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\\/+$/, '');
+const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 const DISMISSED_KEY = 'billing_update_dismissed_code';
 
 export default function AppUpdateChecker() {
