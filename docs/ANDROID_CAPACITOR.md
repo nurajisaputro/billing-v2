@@ -46,6 +46,7 @@ Gunakan alamat publik HTTPS server billing tanpa `/api` di akhir. Jangan gunakan
 cd frontend
 npm install
 npm run android:add
+npm run android:icons
 ```
 
 Perintah `android:add` hanya dijalankan sekali untuk membuat project native di `frontend/android`. Jika folder itu sudah ada, jangan jalankan lagi.
@@ -53,13 +54,22 @@ Perintah `android:add` hanya dijalankan sekali untuk membuat project native di `
 ## 4. Sinkronisasi dan buka Android Studio
 
 ```powershell
+npm run android:icons
 npm run android:sync
 npm run android:open
 ```
 
 Tunggu Gradle sync selesai. Jika diminta, pasang Android SDK Platform yang direkomendasikan oleh Android Studio. Pilih JDK 21 di Settings > Build, Execution, Deployment > Build Tools > Gradle > Gradle JDK.
 
-## 5. Jalankan di HP
+## 5. Printer thermal Bluetooth 58 mm
+
+1. Pasangkan printer thermal dengan HP terlebih dahulu melalui Settings Android > Bluetooth.
+2. Buka aplikasi Noble Media dan masuk ke Beranda.
+3. Pada panel Printer thermal 58 mm, tekan Cari printer dan izinkan akses Bluetooth saat diminta.
+4. Pilih perangkat printer yang sudah dipasangkan. Status akan berubah menjadi Terhubung.
+5. Buka Tagihan lalu tekan Cetak 58mm. Printer harus mendukung ESC/POS melalui Bluetooth Classic (SPP). Jika perangkat tidak muncul, pastikan printer menyala, sudah dipasangkan, dan tidak sedang terhubung ke perangkat lain.
+
+## 6. Jalankan di HP
 
 1. Aktifkan Developer Options dan USB debugging pada HP Android.
 2. Hubungkan HP ke komputer menggunakan kabel USB.
@@ -69,19 +79,20 @@ Tunggu Gradle sync selesai. Jika diminta, pasang Android SDK Platform yang direk
 
 Bisa juga menggunakan Android Emulator dari Device Manager.
 
-## 6. Build APK atau AAB
+## 7. Build APK atau AAB
 
 Untuk APK pengujian: Android Studio > Build > Build Bundle(s) / APK(s) > Build APK(s).
 
 Untuk distribusi: Android Studio > Build > Generate Signed Bundle / APK. Pilih APK untuk instalasi langsung atau Android App Bundle (AAB) untuk Google Play. Buat signing key sendiri dan simpan keystore serta password di tempat aman. Jangan pernah commit file signing key ke Git.
 
-## 7. Update aplikasi setelah perubahan kode
+## 8. Update aplikasi setelah perubahan kode
 
 Setelah mengambil perubahan terbaru:
 
 ```powershell
 cd frontend
 npm install
+npm run android:icons
 npm run android:sync
 npm run android:open
 ```
@@ -96,5 +107,5 @@ Jalankan ulang dari Android Studio atau hasilkan APK/AAB baru. Jika hanya backen
 - Scheduler invoice dan isolir tetap hanya berjalan di server. Android tidak menjalankan scheduler.
 - Sesi saat ini disimpan di memori backend. Jika backend restart, pengguna mungkin perlu login kembali.
 - Uji seluruh role, pembayaran, daftar tagihan, bukti pembayaran, dan logout sebelum distribusi. Uji isolir hanya pada pelanggan uji.
-- Folder `frontend/android` dibuat di komputer pengembang oleh Capacitor. Commit folder tersebut ke repository setelah project native berhasil dibuat, agar konfigurasi Android tersimpan untuk tim.
+- Folder `frontend/android` dibuat di komputer pengembang oleh Capacitor dan tidak disimpan di repository. Perintah `npm run android:icons` membuat resource launcher icon dari `frontend/public/noble-media-icon.svg` langsung ke project Android lokal. Jalankan perintah itu setiap kali project Android dibuat ulang atau setelah logo ikon diganti.
 - Untuk keamanan produksi, jangan mengaktifkan HTTP cleartext atau menonaktifkan validasi sertifikat TLS.
