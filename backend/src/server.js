@@ -27,7 +27,7 @@ function verifyPassword(password, stored) {
   catch { return false; }
 }
 app.use('/api', (req, res, next) => {
-  if (req.path === '/health' || req.path === '/auth/login' || req.path === '/auth/bootstrap' || (req.path === '/brand' && req.method === 'GET')) return next(); || req.path === '/app-update'
+  if (req.path === '/health' || req.path === '/auth/login' || req.path === '/auth/bootstrap' || (req.path === '/brand' && req.method === 'GET') || req.path === '/app-update') return next();
   const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
   const user = sessions.get(token);
   if (!user) return res.status(401).json({ error: 'Sesi berakhir. Silakan login kembali.' });
