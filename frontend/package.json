@@ -18,7 +18,8 @@
     "react-dom": "^19.0.0",
     "lucide-react": "^0.468.0",
     "@capacitor/core": "^7.4.3",
-    "@capacitor/android": "^7.4.3"
+    "@capacitor/android": "^7.4.3",
+    "@fedejm/capacitor-esc-pos-printer": "^0.2.4"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.4.3"
