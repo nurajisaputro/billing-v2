@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
+import AppUpdateChecker from './components/AppUpdateChecker.jsx';
 import MobileBillingApp from './MobileBillingApp.jsx';
 import { LayoutDashboard, Users, Package, Receipt, CreditCard, Router, Settings, RefreshCw, Search, Plus, Wifi, AlertTriangle, Landmark, Banknote, X, Wallet, Boxes, FileSpreadsheet, UserCog, UserCircle, LogOut, Moon, Sun, Trash2, Power, Printer, Menu, MapPin } from 'lucide-react';
 import PaymentHistoryTable from './components/PaymentHistoryTable.jsx';
@@ -257,6 +258,6 @@ function App(){
  async function logout(){try{await api('/auth/logout',{method:'POST'})}catch{}localStorage.removeItem('billing_token');localStorage.removeItem('billing_user');setAuth(null)}
  if(!auth)return <LoginPage brand={brand} onLogin={login}/>;
  const mobileAuth={...auth,setUser:u=>{setAuth(a=>({...a,user:u}));localStorage.setItem('billing_user',JSON.stringify(u))}};
- return Capacitor.isNativePlatform() ? <MobileBillingApp key={auth.user.id} auth={mobileAuth} onLogout={logout}/> : <BillingApp key={auth.user.id} auth={mobileAuth} onLogout={logout}/>;
+ return Capacitor.isNativePlatform() ? <><MobileBillingApp key={auth.user.id} auth={mobileAuth} onLogout={logout}/><AppUpdateChecker/></> : <BillingApp key={auth.user.id} auth={mobileAuth} onLogout={logout}/>;
 }
 export default App;
