@@ -17,6 +17,7 @@ export async function listThermalPrinters() {
   if (!Capacitor.isNativePlatform()) {
     throw new Error('Printer Bluetooth hanya tersedia pada aplikasi Android.');
   }
+  await EscPosPrinter.requestPermissions();
   const enabled = await EscPosPrinter.requestBluetoothEnable();
   if (enabled?.value === false) throw new Error('Aktifkan Bluetooth pada perangkat Android.');
   const result = await EscPosPrinter.getBluetoothPrinterDevices();
@@ -66,5 +67,5 @@ export async function printThermalText(value) {
   if (!hashKey) throw new Error('Printer belum terhubung. Hubungkan printer dari beranda.');
   activeHashKey = hashKey;
   const bytes = [0x1b, 0x40, ...Array.from(new TextEncoder().encode(String(value))), 0x0a, 0x0a, 0x0a];
-  await EscPosPrinter.sendToPrinter({ data: bytes, waitingTime: 1200 });
+  await EscPosPrinter.sendToPrinter({ hashKey, data: bytes, waitingTime: 1200 });
 }
