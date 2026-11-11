@@ -27,13 +27,26 @@ function verifyPassword(password, stored) {
   catch { return false; }
 }
 app.use('/api', (req, res, next) => {
-  if (req.path === '/health' || req.path === '/auth/login' || req.path === '/auth/bootstrap' || (req.path === '/brand' && req.method === 'GET')) return next();
+  if (req.path === '/health' || req.path === '/auth/login' || req.path === '/auth/bootstrap' || (req.path === '/brand' && req.method === 'GET')) return next(); || req.path === '/app-update'
   const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
   const user = sessions.get(token);
   if (!user) return res.status(401).json({ error: 'Sesi berakhir. Silakan login kembali.' });
   req.user = user;
   if (!(roleAccess[user.role]?.(req.path, req.method) ?? false)) return res.status(403).json({ error: 'Akses ditolak untuk role Anda.' });
   next();
+});
+app.get('/api/app-update', (_req,res) => {
+  const version = String(process.env.APP_VERSION || '1.0.0');
+  const versionCode = Number(process.env.APP_VERSION_CODE || 1);
+  const apkUrl = String(process.env.APP_APK_URL || '');
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    version,
+    versionCode: Number.isInteger(versionCode) && versionCode > 0 ? versionCode : 1,
+    apkUrl,
+    forceUpdate: String(process.env.APP_FORCE_UPDATE || 'false').toLowerCase() === 'true',
+    releaseNotes: String(process.env.APP_RELEASE_NOTES || 'Pembaruan aplikasi tersedia.')
+  });
 });
 app.get('/api/auth/bootstrap', asyncRoute(async (_req,res) => {
   const [[row]] = await pool.query('SELECT COUNT(*) total FROM users');
