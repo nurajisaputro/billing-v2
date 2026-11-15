@@ -1232,7 +1232,7 @@ function BillingApp({ auth, onLogout }) {
                               {c.customer_code} · {c.phone || "Tanpa nomor HP"}
                             </small>
                             {c.coverage_area_name && (
-                              <small>{c.coverage_area_name}</small>
+                              <small>{c.address} · {c.coverage_area_name}</small>
                             )}
                             {c.imported_at && (
                               <small className="import-date-label">
