@@ -54,6 +54,7 @@ const nav = [
   ["MikroTik", Router, ["superadmin"]],
   ["Pengaturan", Settings, ["superadmin"]],
   ["Manajemen User", UserCog, ["superadmin", "admin"]],
+  ["Manajemen Kolektor", Users, ["superadmin", "admin"]],
   ["Profile", UserCircle, ["superadmin", "admin", "kolektor"]],
 ];
 function BillingApp({ auth, onLogout }) {
@@ -117,6 +118,7 @@ function BillingApp({ auth, onLogout }) {
   const [importingCustomers, setImportingCustomers] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [coverageAreas, setCoverageAreas] = useState([]);
+  const [collectorSummary, setCollectorSummary] = useState([]);
   async function refreshCustomerStatuses() {
     try {
       const result = await api("/customers/status");
@@ -181,6 +183,7 @@ function BillingApp({ auth, onLogout }) {
   useEffect(() => {
     load();
     refreshCustomerStatuses();
+    loadSummary();
     api("/brand")
       .then((v) => setBrand(v.brand_name))
       .catch(() => {});
@@ -216,6 +219,18 @@ function BillingApp({ auth, onLogout }) {
       setPaymentLoading(false);
     }
   }
+
+  async function loadSummary() {
+    if (!["superadmin", "admin"].includes(auth.user.role)) return;
+    try {
+      const res = await api("/collectors/summary");
+      setCollectorSummary(res.data || []);
+      console.log("Ringkasan kolektor berhasil dimuat:", res.data);
+    } catch (err) {
+      console.error("Gagal memuat ringkasan kolektor:", err.message);
+    }
+  }
+
   useEffect(() => {
     if (page === "Dashboard") validateIsolation();
   }, [page]);
@@ -1220,7 +1235,7 @@ function BillingApp({ auth, onLogout }) {
                                     onClick={() => deleteCustomer(c)}
                                     title="Hapus pelanggan"
                                   >
-                                    <Trash2 size={13} /> Hapus
+                                    <Trash2 size={13} />
                                   </button>
                                 </>
                               )}
@@ -1232,7 +1247,9 @@ function BillingApp({ auth, onLogout }) {
                               {c.customer_code} · {c.phone || "Tanpa nomor HP"}
                             </small>
                             {c.coverage_area_name && (
-                              <small>{c.address} · {c.coverage_area_name}</small>
+                              <small>
+                                {c.address} · {c.coverage_area_name}
+                              </small>
                             )}
                             {c.imported_at && (
                               <small className="import-date-label">
@@ -1667,6 +1684,107 @@ function BillingApp({ auth, onLogout }) {
             onError={setError}
           />
         )}
+
+        {page === "Manajemen Kolektor" &&
+          ["superadmin", "admin"].includes(auth.user.role) && (
+            <>
+              <div className="stats compact-stats">
+                {collectorSummary.map((item) => (
+                  <Stat
+                    key={item.collector_id ?? "unassigned"}
+                    title={item.collector_name}
+                    value={`${item.total_customers} Pelanggan`}
+                    note={`Aktif: ${item.active_customers || 0} · Terisolir: ${item.isolated_customers || 0}`}
+                    icon={UserCog}
+                  />
+                ))}
+              </div>
+
+              {collectorSummary.map((item) => {
+                const memberCustomers = customers.filter((c) =>
+                  item.collector_id === null
+                    ? !c.collector_id
+                    : Number(c.collector_id) === Number(item.collector_id),
+                );
+                return (
+                  <section
+                    className="panel"
+                    key={item.collector_id ?? "unassigned"}
+                  >
+                    <div className="panel-head">
+                      <div>
+                        <h3>{item.collector_name}</h3>
+                        <p>
+                          Total {item.total_customers} pelanggan ·{" "}
+                          {item.active_customers || 0} aktif ·{" "}
+                          {item.isolated_customers || 0} terisolir
+                        </p>
+                      </div>
+                    </div>
+                    <div className="table-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Kode</th>
+                            <th>Nama Pelanggan</th>
+                            <th>Paket</th>
+                            <th>Status Layanan</th>
+                            <th>Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {memberCustomers.map((c) => (
+                            <tr key={c.id}>
+                              <td>{c.customer_code}</td>
+                              <td>
+                                <b>{c.name}</b>
+                                <small>{c.phone || "Tanpa HP"}</small>
+                              </td>
+                              <td>{c.package_name || "—"}</td>
+                              <td>
+                                <span
+                                  className={
+                                    "pill " +
+                                    (c.isolation_status === "isolated"
+                                      ? "red"
+                                      : c.active
+                                        ? "green"
+                                        : "yellow")
+                                  }
+                                >
+                                  {c.isolation_status === "isolated"
+                                    ? "Terisolir"
+                                    : c.active
+                                      ? "Aktif"
+                                      : "Nonaktif"}
+                                </span>
+                              </td>
+                              <td>
+                                <button
+                                  className="small-btn"
+                                  onClick={() => openCustomerDetail(c)}
+                                >
+                                  Detail
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                          {memberCustomers.length === 0 && (
+                            <tr>
+                              <td colSpan="5" className="empty-cell">
+                                Belum ada pelanggan tertaut ke kolektor ini.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                );
+              })}
+            </>
+          )}
+
         {page === "Profile" && (
           <ProfilePage
             user={auth.user}
@@ -3161,17 +3279,17 @@ function InvoiceTable({
                     Bayar
                   </button>
                 ) : null}
-                {onPrint && (
+                {i.status === "paid" && onPrint && (
                   <button
                     className="small-btn secondary"
                     onClick={() => onPrint(i)}
                   >
-                    <Printer size={13} /> Cetak 58mm
+                    <Printer size={13} /> 58mm
                   </button>
                 )}
                 {i.status === "paid" && onPrintPaid && (
                   <button className="small-btn" onClick={() => onPrintPaid(i)}>
-                    <Printer size={13} /> Cetak bukti
+                    <Printer size={13} /> A4
                   </button>
                 )}
                 {onDelete && (
@@ -3181,7 +3299,7 @@ function InvoiceTable({
                       className="small-btn danger-btn"
                       onClick={() => onDelete(i)}
                     >
-                      <Trash2 size={13} /> Hapus
+                      <Trash2 size={13} />
                     </button>
                   </>
                 )}

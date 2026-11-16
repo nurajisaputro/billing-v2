@@ -95,10 +95,10 @@ export async function processIsolation() {
       results.push({ customerId: customer.id, mode, ...(await setCustomerProfile(customer.id, mode)) });
     } catch (e) {
       if (mode === 'isolate') {
-        await pool.execute("UPDATE customers SET isolation_status='error' WHERE id=?", [customer.id]).catch(() => {});
-        await logActivity('customer_isolation_failed', 'customer', customer.id, { error: e.message }).catch(() => {});
+        await pool.execute("UPDATE customers SET isolation_status='error' WHERE id=?", [customer.id]).catch(() => { });
+        await logActivity('customer_isolation_failed', 'customer', customer.id, { error: e.message }).catch(() => { });
       } else {
-        await logActivity('customer_reactivation_failed', 'customer', customer.id, { error: e.message }).catch(() => {});
+        await logActivity('customer_reactivation_failed', 'customer', customer.id, { error: e.message }).catch(() => { });
       }
       results.push({ customerId: customer.id, mode, ok: false, error: e.message });
       console.error(`[isolation] ${mode} failed for customer ${customer.id}: ${e.message}`);
