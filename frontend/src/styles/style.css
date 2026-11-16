@@ -30,26 +30,26 @@ body {
   display: flex;
   gap: 12px;
   align-items: center;
-  padding: 0 8px 32px;
+  /* padding: 0 8px 32px; */
   color: white;
 }
 .brand-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: #2563eb;
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
   display: grid;
   place-items: center;
   color: #fff;
 }
 .brand b {
   font:
-    800 18px Manrope,
+    /* 600 18px Manrope, */
     sans-serif;
   display: block;
   letter-spacing: -0.5px;
 }
 .brand small {
+  margin-top: 8px;
   font-size: 13px;
   color: #9aa7bb;
 }
@@ -58,7 +58,7 @@ body {
   letter-spacing: 1.4px;
   font-weight: 700;
   color: #69778d;
-  padding: 0 12px 12px;
+  padding: 34px 12px 12px;
 }
 .nav-item {
   border: 0;

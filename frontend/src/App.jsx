@@ -37,6 +37,7 @@ import {
 import PaymentHistoryTable from "./components/PaymentHistoryTable.jsx";
 import { api } from "./lib/api.js";
 import { money } from "./utils/format.js";
+import brandLogo from "../public/noble-media-icon.svg"
 
 const standaloneNav = [["Dashboard", LayoutDashboard, ["superadmin", "admin"]]];
 
@@ -68,13 +69,13 @@ const navGroups = [
     items: [
       ["MikroTik", Router, ["superadmin"]],
       ["Rekening", Landmark, ["superadmin", "admin"]],
-      ["Manajemen User", UserCog, ["superadmin", "admin"]],
       ["Manajemen Kolektor", Users, ["superadmin", "admin"]],
     ],
   },
   {
     title: "Sistem & Akun",
     items: [
+      ["Manajemen User", UserCog, ["superadmin", "admin"]],
       ["Pengaturan", Settings, ["superadmin"]],
       ["Profile", UserCircle, ["superadmin", "admin", "kolektor"]],
     ],
@@ -625,7 +626,7 @@ function BillingApp({ auth, onLogout }) {
       <aside className={"sidebar " + (mobileMenuOpen ? "mobile-open" : "")}>
         <div className="brand">
           <div className="brand-icon">
-            <Wifi size={22} />
+            <img src={brandLogo} alt="Brand Logo" style={{ width: "50px", height: "50px" }} />
           </div>
           <div>
             <b>{brand}</b>
@@ -714,9 +715,8 @@ function BillingApp({ auth, onLogout }) {
 
         <div className="sidebar-bottom">
           <span className="copyright">
-            copyright © 2026 PT NOBLE TELEVISION JATIPURWO. All rights reserved.
+            COPYRIGHT © 2026 PT NOBLE TELEVISION JATIPURWO. All rights reserved.
           </span>
-          <span className="online-dot" /> {auth.user.role.toUpperCase()}
         </div>
       </aside>
       <main className="main">
