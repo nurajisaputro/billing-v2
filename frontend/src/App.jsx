@@ -31,36 +31,65 @@ import {
   Printer,
   Menu,
   MapPin,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import PaymentHistoryTable from "./components/PaymentHistoryTable.jsx";
 import { api } from "./lib/api.js";
 import { money } from "./utils/format.js";
 
-const nav = [
-  ["Dashboard", LayoutDashboard, ["superadmin", "admin"]],
-  ["Pelanggan", Users, ["superadmin", "admin", "kolektor"]],
-  ["Coverage Area", MapPin, ["superadmin", "admin"]],
-  ["Paket", Package, ["superadmin", "admin"]],
-  ["Tagihan", Receipt, ["superadmin", "admin", "kolektor"]],
-  ["Pembayaran", CreditCard, ["superadmin", "admin", "kolektor"]],
-  [
-    "Laporan Keuangan Bulanan",
-    FileSpreadsheet,
-    ["superadmin", "admin", "kolektor"],
-  ],
-  ["Pengeluaran", Wallet, ["superadmin", "admin"]],
-  ["Aset", Boxes, ["superadmin", "admin"]],
-  ["Rekening", Landmark, ["superadmin", "admin"]],
-  ["MikroTik", Router, ["superadmin"]],
-  ["Pengaturan", Settings, ["superadmin"]],
-  ["Manajemen User", UserCog, ["superadmin", "admin"]],
-  ["Manajemen Kolektor", Users, ["superadmin", "admin"]],
-  ["Profile", UserCircle, ["superadmin", "admin", "kolektor"]],
+const standaloneNav = [["Dashboard", LayoutDashboard, ["superadmin", "admin"]]];
+
+const navGroups = [
+  {
+    title: "Pelanggan & Layanan",
+    items: [
+      ["Pelanggan", Users, ["superadmin", "admin", "kolektor"]],
+      ["Coverage Area", MapPin, ["superadmin", "admin"]],
+      ["Paket", Package, ["superadmin", "admin"]],
+    ],
+  },
+  {
+    title: "Keuangan & Aset",
+    items: [
+      ["Tagihan", Receipt, ["superadmin", "admin", "kolektor"]],
+      ["Pembayaran", CreditCard, ["superadmin", "admin", "kolektor"]],
+      [
+        "Laporan Keuangan Bulanan",
+        FileSpreadsheet,
+        ["superadmin", "admin", "kolektor"],
+      ],
+      ["Pengeluaran", Wallet, ["superadmin", "admin"]],
+      ["Aset", Boxes, ["superadmin", "admin"]],
+    ],
+  },
+  {
+    title: "Billing & Router",
+    items: [
+      ["MikroTik", Router, ["superadmin"]],
+      ["Rekening", Landmark, ["superadmin", "admin"]],
+      ["Manajemen User", UserCog, ["superadmin", "admin"]],
+      ["Manajemen Kolektor", Users, ["superadmin", "admin"]],
+    ],
+  },
+  {
+    title: "Sistem & Akun",
+    items: [
+      ["Pengaturan", Settings, ["superadmin"]],
+      ["Profile", UserCircle, ["superadmin", "admin", "kolektor"]],
+    ],
+  },
 ];
+
 function BillingApp({ auth, onLogout }) {
+  // 1. Deklarasikan 'page' TERLEBIH DAHULU
   const [page, setPage] = useState(() => {
     const saved = sessionStorage.getItem("billing_current_page");
-    const allowed = nav.find(
+    const allItems = [
+      ...standaloneNav,
+      ...navGroups.flatMap((group) => group.items),
+    ];
+    const allowed = allItems.find(
       ([label, , roles]) => label === saved && roles.includes(auth.user.role),
     );
     return allowed
@@ -69,6 +98,24 @@ function BillingApp({ auth, onLogout }) {
         ? "Pelanggan"
         : "Dashboard";
   });
+
+  // 2. Baru deklarasikan 'openGroups' SETELAH 'page' dibuat
+  const [openGroups, setOpenGroups] = useState(() => {
+    const activeGroup = navGroups.find((g) =>
+      g.items.some(([label]) => label === page),
+    );
+    return activeGroup
+      ? { [activeGroup.title]: true }
+      : { "Pelanggan & Layanan": true };
+  });
+
+  function toggleGroup(title) {
+    setOpenGroups((prev) => ({
+      ...prev,
+      [title]: !prev[title],
+    }));
+  }
+
   const [brand, setBrand] = useState("BillingNet");
   const [dark, setDark] = useState(
     localStorage.getItem("billing_theme") === "dark",
@@ -586,8 +633,10 @@ function BillingApp({ auth, onLogout }) {
           </div>
         </div>
         <div className="nav-label">MENU UTAMA</div>
-        {nav
-          .filter(([label, Icon, roles]) => roles.includes(auth.user.role))
+
+        {/* Menu Tunggal (Dashboard) */}
+        {standaloneNav
+          .filter(([, , roles]) => roles.includes(auth.user.role))
           .map(([label, Icon]) => (
             <button
               key={label}
@@ -602,7 +651,71 @@ function BillingApp({ auth, onLogout }) {
               <span>{label}</span>
             </button>
           ))}
+
+        {/* Kelompok Menu Dropdown */}
+        {navGroups.map((group) => {
+          const visibleItems = group.items.filter(([, , roles]) =>
+            roles.includes(auth.user.role),
+          );
+          if (visibleItems.length === 0) return null;
+
+          const isOpen = Boolean(openGroups[group.title]);
+          const hasActiveChild = visibleItems.some(([label]) => label === page);
+
+          return (
+            <div key={group.title} style={{ marginTop: "6px" }}>
+              <button
+                type="button"
+                className="nav-item"
+                onClick={() => toggleGroup(group.title)}
+                style={{
+                  justifyContent: "space-between",
+                  fontWeight: hasActiveChild ? "600" : "500",
+                  opacity: 0.9,
+                }}
+              >
+                <span style={{ fontSize: "13px" }}>{group.title}</span>
+                {isOpen ? (
+                  <ChevronDown size={16} />
+                ) : (
+                  <ChevronRight size={16} />
+                )}
+              </button>
+
+              {isOpen && (
+                <div
+                  style={{
+                    paddingLeft: "12px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "2px",
+                    marginTop: "2px",
+                  }}
+                >
+                  {visibleItems.map(([label, Icon]) => (
+                    <button
+                      key={label}
+                      className={"nav-item " + (page === label ? "active" : "")}
+                      onClick={() => {
+                        setPage(label);
+                        setShowForm(false);
+                        setMobileMenuOpen(false);
+                      }}
+                    >
+                      <Icon size={17} />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
         <div className="sidebar-bottom">
+          <span className="copyright">
+            copyright © 2026 PT NOBLE TELEVISION JATIPURWO. All rights reserved.
+          </span>
           <span className="online-dot" /> {auth.user.role.toUpperCase()}
         </div>
       </aside>
@@ -3093,7 +3206,7 @@ function LoginPage({ onLogin, brand }) {
   const [setup, setSetup] = useState(false),
     [f, setF] = useState({
       name: "Super Admin",
-      username: "admin",
+      username: "",
       password: "",
     }),
     [error, setError] = useState("");
@@ -3138,6 +3251,7 @@ function LoginPage({ onLogin, brand }) {
           {setup && (
             <Field label="Nama">
               <input
+                placeholder="Masukkan Nama"
                 required
                 value={f.name}
                 onChange={(e) => setF({ ...f, name: e.target.value })}
@@ -3146,6 +3260,7 @@ function LoginPage({ onLogin, brand }) {
           )}
           <Field label="Username">
             <input
+              placeholder="Username"
               required
               autoComplete="username"
               value={f.username}
@@ -3154,6 +3269,7 @@ function LoginPage({ onLogin, brand }) {
           </Field>
           <Field label="Password">
             <input
+              placeholder="Password"
               type="password"
               required
               autoComplete={setup ? "new-password" : "current-password"}
