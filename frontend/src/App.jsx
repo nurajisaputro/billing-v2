@@ -37,9 +37,9 @@ import {
 import PaymentHistoryTable from "./components/PaymentHistoryTable.jsx";
 import { api } from "./lib/api.js";
 import { money } from "./utils/format.js";
-import brandLogo from "../public/noble-media-icon.svg"
+import brandLogo from "./assets/brand-logo.svg";
 
-const standaloneNav = [["Dashboard", LayoutDashboard, ["superadmin", "admin"]]];
+const standaloneNav = [["Dashboard", LayoutDashboard, ["superadmin", "admin", "kolektor"]]];
 
 const navGroups = [
   {
@@ -83,7 +83,6 @@ const navGroups = [
 ];
 
 function BillingApp({ auth, onLogout }) {
-  // 1. Deklarasikan 'page' TERLEBIH DAHULU
   const [page, setPage] = useState(() => {
     const saved = sessionStorage.getItem("billing_current_page");
     const allItems = [
@@ -93,11 +92,7 @@ function BillingApp({ auth, onLogout }) {
     const allowed = allItems.find(
       ([label, , roles]) => label === saved && roles.includes(auth.user.role),
     );
-    return allowed
-      ? saved
-      : auth.user.role === "kolektor"
-        ? "Pelanggan"
-        : "Dashboard";
+    return allowed ? saved : "Dashboard";
   });
 
   // 2. Baru deklarasikan 'openGroups' SETELAH 'page' dibuat
@@ -181,7 +176,8 @@ function BillingApp({ auth, onLogout }) {
     setError("");
     try {
       if (auth.user.role === "kolektor") {
-        const [c, i, a, p, r, areas] = await Promise.all([
+        const [d, c, i, a, p, r, areas] = await Promise.all([
+          api("/dashboard"),
           api("/customers"),
           api("/invoices"),
           api("/bank-accounts"),
@@ -189,13 +185,13 @@ function BillingApp({ auth, onLogout }) {
           api("/routers"),
           api("/coverage-areas"),
         ]);
+        setDash(d);
         setCoverageAreas(areas);
         setCustomers(c);
         setInvoices(i);
         setBankAccounts(a);
         setPackages(p);
         setRouters(r);
-        setDash(null);
       } else {
         const [d, c, i, p, r, a, areas] = await Promise.all([
           api("/dashboard"),
@@ -3521,7 +3517,9 @@ function CustomerDetailPage({ loading, data, live, onPay }) {
         </div>
         <div>
           <small>IP Address MikroTik</small>
-          <b>{live?.ip || "—"}</b>
+          <b><a href={`http://${live?.ip || "—"}`} target="_blank" rel="noreferrer">
+            {live?.ip || "—"}
+          </a></b>
         </div>
         <div>
           <small>Status isolir</small>
