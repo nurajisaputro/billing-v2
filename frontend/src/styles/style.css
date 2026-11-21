@@ -43,8 +43,7 @@ body {
 }
 .brand b {
   font:
-    /* 600 18px Manrope, */
-    sans-serif;
+    /* 600 18px Manrope, */ sans-serif;
   display: block;
   letter-spacing: -0.5px;
 }
@@ -469,6 +468,38 @@ td small {
   width: 100%;
   font: 12px "DM Sans";
   color: #334155;
+}
+
+.collector-assign-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.collector-assign-bar .filter-select {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.collector-assign-btn {
+  height: 38px; /* sesuaikan dengan tinggi input/select di style.css jika perlu */
+  display: inline-flex;
+  align-items: center;
+}
+
+.payment-filter-head .welcome-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.payment-filter-head .month-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .form-grid {
   padding: 8px 20px 20px;

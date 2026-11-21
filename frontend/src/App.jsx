@@ -165,6 +165,11 @@ function BillingApp({ auth, onLogout }) {
   const [bulkCollector, setBulkCollector] = useState("");
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [invoiceFilter, setInvoiceFilter] = useState("all");
+  const [invoiceMonth, setInvoiceMonth] = useState(() =>
+  new Date()
+    .toLocaleDateString("sv-SE", { timeZone: "Asia/Jakarta" })
+    .slice(0, 7),
+);
   const [globalSearch, setGlobalSearch] = useState("");
   const [detailCustomer, setDetailCustomer] = useState(null);
   const [customerDetail, setCustomerDetail] = useState(null);
@@ -173,6 +178,37 @@ function BillingApp({ auth, onLogout }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [coverageAreas, setCoverageAreas] = useState([]);
   const [collectorSummary, setCollectorSummary] = useState([]);
+  const [collectorMemberIds, setCollectorMemberIds] = useState([]);
+  const [assignCollectorId, setAssignCollectorId] = useState("");
+  const [collectorSaving, setCollectorSaving] = useState(false);
+
+  async function updateCollectorAssignment(
+    customerIds,
+    collectorId,
+    successMsg,
+  ) {
+    if (!customerIds.length) return;
+    setCollectorSaving(true);
+    try {
+      await api("/customers/collector/bulk", {
+        method: "PUT",
+        body: JSON.stringify({
+          customer_ids: customerIds,
+          collector_id: collectorId,
+        }),
+      });
+      setNotice(successMsg);
+      setCollectorMemberIds([]);
+      setAssignCollectorId("");
+      await load();
+      await loadSummary();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setCollectorSaving(false);
+    }
+  }
+
   async function refreshCustomerStatuses() {
     try {
       const result = await api("/customers/status");
@@ -1746,135 +1782,173 @@ function BillingApp({ auth, onLogout }) {
             const monthNow = new Date()
               .toLocaleDateString("sv-SE", { timeZone: "Asia/Jakarta" })
               .slice(0, 7);
+            const activeMonth = invoiceMonth || monthNow;
+
+            const [y, m] = activeMonth.split("-").map(Number);
+            const prevMonth = new Date(Date.UTC(y, m - 2, 1))
+              .toISOString()
+              .slice(0, 7);
+
+            const isCurrentMonth = activeMonth === monthNow;
             const monthInvoices = invoices.filter(
-              (i) => String(i.period_month || "") === monthNow,
+              (i) => String(i.period_month || "") === activeMonth,
             );
+
+            const unpaidInvoices = monthInvoices.filter((i) =>
+              ["unpaid", "partial"].includes(i.status),
+            );
+            const paidInvoices = monthInvoices.filter(
+              (i) => i.status === "paid",
+            );
+            const unpaidTotal = unpaidInvoices.reduce(
+              (n, i) => n + Number(i.amount - i.paid_amount),
+              0,
+            );
+            const paidTotal = paidInvoices.reduce(
+              (n, i) => n + Number(i.amount),
+              0,
+            );
+
             return (
-              <>
-                <div className="stats compact-stats invoice-stats">
-                  <Stat
-                    title="Tagihan Belum Lunas Bulan Ini"
-                    value={money(
-                      monthInvoices
-                        .filter((i) => ["unpaid", "partial"].includes(i.status))
-                        .reduce(
-                          (n, i) => n + Number(i.amount - i.paid_amount),
-                          0,
-                        ),
+              <section className="panel">
+                <div className="panel-head payment-filter-head">
+                  <div>
+                    <h3>
+                      {isCurrentMonth
+                        ? "Tagihan Bulan Ini"
+                        : `Riwayat Tagihan (${activeMonth})`}
+                    </h3>
+                    <p>
+                      {isCurrentMonth
+                        ? "Kelola tagihan periode berjalan, lihat bulan lalu, atau generate tagihan baru."
+                        : `Menampilkan tagihan periode ${activeMonth}.`}
+                    </p>
+                  </div>
+                  <div className="welcome-actions">
+                    {!isCurrentMonth && (
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          setInvoiceMonth(monthNow);
+                          setInvoiceFilter("all");
+                        }}
+                      >
+                        Bulan Ini ({monthNow})
+                      </button>
                     )}
-                    note={`${monthInvoices.filter((i) => ["unpaid", "partial"].includes(i.status)).length} tagihan`}
-                    icon={Receipt}
-                    onClick={() => setInvoiceFilter("unpaid")}
-                    active={invoiceFilter === "unpaid"}
-                  />
-                  <Stat
-                    title="Tagihan Lunas Bulan Ini"
-                    value={money(
-                      monthInvoices
-                        .filter((i) => i.status === "paid")
-                        .reduce((n, i) => n + Number(i.amount), 0),
-                    )}
-                    note={`${monthInvoices.filter((i) => i.status === "paid").length} tagihan`}
-                    icon={CreditCard}
-                    onClick={() => setInvoiceFilter("paid")}
-                    active={invoiceFilter === "paid"}
-                  />
-                  <Stat
-                    title="Total Tagihan Bulan Ini"
-                    value={monthInvoices.length}
-                    note="Hanya periode berjalan"
-                    icon={FileSpreadsheet}
-                    onClick={() => setInvoiceFilter("all")}
-                    active={invoiceFilter === "all"}
-                  />
-                </div>
-                <section className="panel">
-                  <div className="panel-head">
-                    <div>
-                      <h3>Tagihan Bulan Ini</h3>
-                      <p>
-                        Periode {monthNow} · Tagihan bulan lain disembunyikan
-                        dari halaman ini
-                      </p>
-                    </div>
+                    <label className="month-filter">
+                      <span>Bulan tagihan</span>
+                      <input
+                        type="month"
+                        value={activeMonth}
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            setInvoiceMonth(e.target.value);
+                            setInvoiceFilter("all");
+                          }
+                        }}
+                      />
+                    </label>
                     <button className="primary" onClick={generate}>
                       <Plus size={17} /> Generate Tagihan
                     </button>
                   </div>
-                  <div className="toolbar">
-                    <div className="search">
-                      <Search size={17} />
-                      <input
-                        placeholder="Cari nomor tagihan, nama atau kode pelanggan..."
-                        value={invoiceSearch}
-                        onChange={(e) => setInvoiceSearch(e.target.value)}
-                      />
-                    </div>
-                    <label className="filter-select">
-                      <span>Status tagihan</span>
-                      <select
-                        value={invoiceFilter}
-                        onChange={(e) => setInvoiceFilter(e.target.value)}
-                      >
-                        <option value="all">Semua status</option>
-                        <option value="unpaid">Belum lunas / sebagian</option>
-                        <option value="paid">Lunas</option>
-                      </select>
-                    </label>
+                </div>
+
+                <div className="payment-summary">
+                  <div>
+                    <span>Belum lunas ({unpaidInvoices.length})</span>
+                    <strong>{money(unpaidTotal)}</strong>
                   </div>
-                  <InvoiceTable
-                    rows={monthInvoices.filter(
-                      (i) =>
-                        (invoiceFilter === "all" ||
-                          (invoiceFilter === "unpaid"
-                            ? ["unpaid", "partial"].includes(i.status)
-                            : i.status === invoiceFilter)) &&
-                        `${i.invoice_number} ${i.customer_name} ${i.customer_code}`
-                          .toLowerCase()
-                          .includes(invoiceSearch.toLowerCase()),
-                    )}
-                    onPay={payment}
-                    onPrint={printInvoiceThermal}
-                    onPrintPaid={printInvoiceReceipt}
-                    onDelete={async (invoice) => {
-                      if (
-                        !window.confirm(
-                          `Hapus tagihan ${invoice.invoice_number}? Pembayaran yang terkait juga akan dihapus. Tindakan ini tidak dapat dibatalkan.`,
-                        )
+                  <div>
+                    <span>Lunas ({paidInvoices.length})</span>
+                    <strong>{money(paidTotal)}</strong>
+                  </div>
+                  <div>
+                    <span>Total tagihan</span>
+                    <strong>{monthInvoices.length}</strong>
+                  </div>
+                  <div>
+                    <span>Periode</span>
+                    <strong>{activeMonth}</strong>
+                  </div>
+                </div>
+
+                <div className="toolbar">
+                  <div className="search">
+                    <Search size={17} />
+                    <input
+                      placeholder="Cari nomor tagihan, nama atau kode pelanggan..."
+                      value={invoiceSearch}
+                      onChange={(e) => setInvoiceSearch(e.target.value)}
+                    />
+                  </div>
+                  <label className="filter-select">
+                    <span>Status tagihan</span>
+                    <select
+                      value={invoiceFilter}
+                      onChange={(e) => setInvoiceFilter(e.target.value)}
+                    >
+                      <option value="all">Semua status</option>
+                      <option value="unpaid">Belum lunas / sebagian</option>
+                      <option value="paid">Lunas</option>
+                    </select>
+                  </label>
+                </div>
+
+                <InvoiceTable
+                  rows={monthInvoices.filter(
+                    (i) =>
+                      (invoiceFilter === "all" ||
+                        (invoiceFilter === "unpaid"
+                          ? ["unpaid", "partial"].includes(i.status)
+                          : i.status === invoiceFilter)) &&
+                      `${i.invoice_number} ${i.customer_name} ${i.customer_code}`
+                        .toLowerCase()
+                        .includes(invoiceSearch.toLowerCase()),
+                  )}
+                  onPay={payment}
+                  onPrint={printInvoiceThermal}
+                  onPrintPaid={printInvoiceReceipt}
+                  onDelete={async (invoice) => {
+                    if (
+                      !window.confirm(
+                        `Hapus tagihan ${invoice.invoice_number}? Pembayaran yang terkait juga akan dihapus. Tindakan ini tidak dapat dibatalkan.`,
                       )
-                        return;
-                      try {
-                        await api(`/invoices/${invoice.id}`, {
-                          method: "DELETE",
-                        });
-                        setNotice(`Tagihan ${invoice.invoice_number} dihapus.`);
-                        load();
-                        if (page === "Pembayaran")
-                          loadPaymentHistory(paymentMonth);
-                      } catch (e) {
-                        setError(e.message);
-                      }
-                    }}
-                    onNunggak={async (invoice) => {
-                      try {
-                        const skip = !Boolean(invoice.skip_isolation);
-                        await api(`/invoices/${invoice.id}/nunggak`, {
-                          method: "PUT",
-                          body: JSON.stringify({ skip }),
-                        });
-                        setNotice(
-                          skip
-                            ? `NUNGGAK diaktifkan untuk ${invoice.invoice_number}; isolir bulan ini dilewati.`
-                            : `Pengecualian NUNGGAK dihapus untuk ${invoice.invoice_number}.`,
-                        );
-                        load();
-                      } catch (e) {
-                        setError(e.message);
-                      }
-                    }}
-                  />
-                </section>
-              </>
+                    )
+                      return;
+                    try {
+                      await api(`/invoices/${invoice.id}`, {
+                        method: "DELETE",
+                      });
+                      setNotice(`Tagihan ${invoice.invoice_number} dihapus.`);
+                      load();
+                      if (page === "Pembayaran")
+                        loadPaymentHistory(paymentMonth);
+                    } catch (e) {
+                      setError(e.message);
+                    }
+                  }}
+                  onNunggak={async (invoice) => {
+                    try {
+                      const skip = !Boolean(invoice.skip_isolation);
+                      await api(`/invoices/${invoice.id}/nunggak`, {
+                        method: "PUT",
+                        body: JSON.stringify({ skip }),
+                      });
+                      setNotice(
+                        skip
+                          ? `NUNGGAK diaktifkan untuk ${invoice.invoice_number}; isolir bulan ini dilewati.`
+                          : `Pengecualian NUNGGAK dihapus untuk ${invoice.invoice_number}.`,
+                      );
+                      load();
+                    } catch (e) {
+                      setError(e.message);
+                    }
+                  }}
+                />
+              </section>
             );
           })()}
         {page === "Paket" && (
@@ -2015,10 +2089,11 @@ function BillingApp({ auth, onLogout }) {
           />
         )}
 
-{page === "Manajemen Kolektor" &&
-          ["superadmin", "admin"].includes(auth.user.role) && (() => {
+        {page === "Manajemen Kolektor" &&
+          ["superadmin", "admin"].includes(auth.user.role) &&
+          (() => {
             const activeCollector =
-              selectedCollectorId === undefined
+              selectedCollectorId === undefined || selectedCollectorId === null
                 ? null
                 : collectorSummary.find(
                     (item) =>
@@ -2026,14 +2101,20 @@ function BillingApp({ auth, onLogout }) {
                       String(selectedCollectorId),
                   );
 
+            const isUnassignedGroup = activeCollector?.collector_id === null;
+
             const memberCustomers = activeCollector
               ? customers.filter((c) =>
-                  activeCollector.collector_id === null
+                  isUnassignedGroup
                     ? !c.collector_id
                     : Number(c.collector_id) ===
                       Number(activeCollector.collector_id),
                 )
               : [];
+
+            const allMembersChecked =
+              memberCustomers.length > 0 &&
+              memberCustomers.every((c) => collectorMemberIds.includes(c.id));
 
             return (
               <>
@@ -2073,11 +2154,13 @@ function BillingApp({ auth, onLogout }) {
                                 <button
                                   type="button"
                                   className="small-btn"
-                                  onClick={() =>
+                                  onClick={() => {
+                                    setCollectorMemberIds([]);
+                                    setAssignCollectorId("");
                                     setSelectedCollectorId(
                                       isSelected ? null : key,
-                                    )
-                                  }
+                                    );
+                                  }}
                                 >
                                   {isSelected
                                     ? "Tutup Detail"
@@ -2113,15 +2196,98 @@ function BillingApp({ auth, onLogout }) {
                       <button
                         type="button"
                         className="secondary"
-                        onClick={() => setSelectedCollectorId(null)}
+                        onClick={() => {
+                          setSelectedCollectorId(null);
+                          setCollectorMemberIds([]);
+                          setAssignCollectorId("");
+                        }}
                       >
                         Tutup
                       </button>
                     </div>
+
+                    {isUnassignedGroup && memberCustomers.length > 0 && (
+                      <div className="toolbar collector-assign-bar">
+                        <label className="filter-select">
+                          <span>
+                            Set kolektor untuk {collectorMemberIds.length}{" "}
+                            pelanggan terpilih
+                          </span>
+                          <select
+                            value={assignCollectorId}
+                            onChange={(e) =>
+                              setAssignCollectorId(e.target.value)
+                            }
+                          >
+                            <option value="">Pilih kolektor</option>
+                            {users
+                              .filter((u) => u.role === "kolektor" && u.active)
+                              .map((u) => (
+                                <option key={u.id} value={u.id}>
+                                  {u.name} ({u.username})
+                                </option>
+                              ))}
+                          </select>
+                        </label>
+                        <button
+                          type="button"
+                          className="primary collector-assign-btn"
+                          disabled={
+                            collectorSaving ||
+                            !collectorMemberIds.length ||
+                            !assignCollectorId
+                          }
+                          onClick={() =>
+                            updateCollectorAssignment(
+                              collectorMemberIds,
+                              Number(assignCollectorId),
+                              `Berhasil menugaskan ${collectorMemberIds.length} pelanggan ke kolektor.`,
+                            )
+                          }
+                        >
+                          {collectorSaving ? "Menyimpan…" : "Set Kolektor"}
+                        </button>
+                      </div>
+                    )}
+
+                    {!isUnassignedGroup && collectorMemberIds.length > 0 && (
+                      <div className="toolbar" style={{ marginBottom: "10px" }}>
+                        <button
+                          type="button"
+                          className="small-btn danger-btn"
+                          disabled={collectorSaving}
+                          onClick={() =>
+                            updateCollectorAssignment(
+                              collectorMemberIds,
+                              null,
+                              `${collectorMemberIds.length} pelanggan dihapus dari ${activeCollector.collector_name}.`,
+                            )
+                          }
+                        >
+                          Hapus {collectorMemberIds.length} Terpilih dari
+                          Kolektor
+                        </button>
+                      </div>
+                    )}
+
                     <div className="table-wrap">
                       <table>
                         <thead>
                           <tr>
+                            <th style={{ width: "32px" }}>
+                              <input
+                                type="checkbox"
+                                aria-label="Pilih semua pelanggan"
+                                checked={allMembersChecked}
+                                onChange={(e) =>
+                                  setCollectorMemberIds(
+                                    e.target.checked
+                                      ? memberCustomers.map((c) => c.id)
+                                      : [],
+                                  )
+                                }
+                              />
+                            </th>
                             <th>Kode</th>
                             <th>Nama Pelanggan</th>
                             <th>Paket</th>
@@ -2132,10 +2298,24 @@ function BillingApp({ auth, onLogout }) {
                         <tbody>
                           {memberCustomers.map((c) => (
                             <tr key={c.id}>
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  aria-label={`Pilih ${c.name}`}
+                                  checked={collectorMemberIds.includes(c.id)}
+                                  onChange={(e) =>
+                                    setCollectorMemberIds((prev) =>
+                                      e.target.checked
+                                        ? [...prev, c.id]
+                                        : prev.filter((id) => id !== c.id),
+                                    )
+                                  }
+                                />
+                              </td>
                               <td>{c.customer_code}</td>
                               <td>
                                 <b>{c.name}</b>
-                                <small>{c.phone || "Tanpa HP"}</small>
+                                <small>{c.address || "Tanpa Alamat"} - {c.phone || "Tanpa Nomor HP"}</small>
                               </td>
                               <td>{c.package_name || "—"}</td>
                               <td>
@@ -2157,19 +2337,37 @@ function BillingApp({ auth, onLogout }) {
                                 </span>
                               </td>
                               <td>
-                                <button
-                                  type="button"
-                                  className="small-btn"
-                                  onClick={() => openCustomerDetail(c)}
-                                >
-                                  Detail
-                                </button>
+                                <div className="customer-row-actions">
+                                  <button
+                                    type="button"
+                                    className="small-btn"
+                                    onClick={() => openCustomerDetail(c)}
+                                  >
+                                    Detail
+                                  </button>
+                                  {!isUnassignedGroup && (
+                                    <button
+                                      type="button"
+                                      className="small-btn danger-btn"
+                                      disabled={collectorSaving}
+                                      onClick={() =>
+                                        updateCollectorAssignment(
+                                          [c.id],
+                                          null,
+                                          `${c.name} dihapus dari ${activeCollector.collector_name}.`,
+                                        )
+                                      }
+                                    >
+                                      Hapus dari Kolektor
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           ))}
                           {memberCustomers.length === 0 && (
                             <tr>
-                              <td colSpan="5" className="empty-cell">
+                              <td colSpan="6" className="empty-cell">
                                 Belum ada pelanggan tertaut ke kolektor ini.
                               </td>
                             </tr>
