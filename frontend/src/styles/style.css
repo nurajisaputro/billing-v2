@@ -458,6 +458,7 @@ td small {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 16px;
   padding: 0 10px;
   color: #9aa3b2;
   max-width: 420px;

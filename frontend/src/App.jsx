@@ -33,13 +33,19 @@ import {
   MapPin,
   ChevronDown,
   ChevronRight,
+  Info,
+  Pencil,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 import PaymentHistoryTable from "./components/PaymentHistoryTable.jsx";
 import { api } from "./lib/api.js";
 import { money } from "./utils/format.js";
 import brandLogo from "./assets/brand-logo.svg";
 
-const standaloneNav = [["Dashboard", LayoutDashboard, ["superadmin", "admin", "kolektor"]]];
+const standaloneNav = [
+  ["Dashboard", LayoutDashboard, ["superadmin", "admin", "kolektor"]],
+];
 
 const navGroups = [
   {
@@ -144,6 +150,11 @@ function BillingApp({ auth, onLogout }) {
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [customerServiceFilter, setCustomerServiceFilter] = useState("all");
   const [customerStatusFilter, setCustomerStatusFilter] = useState("all");
+  const [customerAreaFilter, setCustomerAreaFilter] = useState("all");
+  const [customerCollectorFilter, setCustomerCollectorFilter] = useState("all");
+  const [selectedCollectorId, setSelectedCollectorId] = useState(null);
+  const [customerLimit, setCustomerLimit] = useState(25);
+  const [customerPage, setCustomerPage] = useState(1);
   const [customerStatuses, setCustomerStatuses] = useState({});
   const [customerStatusCheckedAt, setCustomerStatusCheckedAt] = useState(null);
   const [notice, setNotice] = useState("");
@@ -315,13 +326,21 @@ function BillingApp({ auth, onLogout }) {
     (!c.router_id ||
       !c.pppoe_username ||
       customerStatuses[c.id]?.status !== "online");
-  const filteredCustomers = customers.filter(
+  const matchingCustomers = customers.filter(
     (c) =>
-      `${c.customer_code} ${c.name} ${c.pppoe_username || ""} ${c.phone || ""}`
+      `${c.customer_code} ${c.name} ${c.pppoe_username || ""} ${c.phone || ""} ${c.address || ""}`
         .toLowerCase()
         .includes(search.toLowerCase()) &&
       (customerServiceFilter === "all" ||
         c.service_type === customerServiceFilter) &&
+      (customerAreaFilter === "all" ||
+        (customerAreaFilter === "none"
+          ? !c.coverage_area_id
+          : String(c.coverage_area_id) === String(customerAreaFilter))) &&
+      (customerCollectorFilter === "all" ||
+        (customerCollectorFilter === "unassigned"
+          ? !c.collector_id
+          : String(c.collector_id) === String(customerCollectorFilter))) &&
       (customerStatusFilter === "all" ||
         (customerStatusFilter === "active" && isOperationalActive(c)) ||
         (customerStatusFilter === "isolated" &&
@@ -330,6 +349,20 @@ function BillingApp({ auth, onLogout }) {
         (customerStatusFilter === "not_connected" &&
           isNotConnectedToMikroTik(c))),
   );
+  const effectiveLimit =
+    customerLimit === "all"
+      ? Math.max(matchingCustomers.length, 1)
+      : Number(customerLimit);
+  const totalCustomerPages = Math.max(
+    Math.ceil(matchingCustomers.length / effectiveLimit),
+    1,
+  );
+  const safeCustomerPage = Math.min(customerPage, totalCustomerPages);
+  const startIdx = (safeCustomerPage - 1) * effectiveLimit;
+  const filteredCustomers =
+    customerLimit === "all"
+      ? matchingCustomers
+      : matchingCustomers.slice(startIdx, startIdx + effectiveLimit);
   async function toggleCustomerIsolation(c) {
     const isolated = c.isolation_status === "isolated";
     const action = isolated ? "reactivate" : "isolate";
@@ -622,7 +655,11 @@ function BillingApp({ auth, onLogout }) {
       <aside className={"sidebar " + (mobileMenuOpen ? "mobile-open" : "")}>
         <div className="brand">
           <div className="brand-icon">
-            <img src={brandLogo} alt="Brand Logo" style={{ width: "50px", height: "50px" }} />
+            <img
+              src={brandLogo}
+              alt="Brand Logo"
+              style={{ width: "50px", height: "50px" }}
+            />
           </div>
           <div>
             <b>{brand}</b>
@@ -984,7 +1021,10 @@ function BillingApp({ auth, onLogout }) {
                 value={customers.length}
                 note="Klik untuk melihat semua"
                 icon={Users}
-                onClick={() => setCustomerStatusFilter("all")}
+                onClick={() => {
+                  setCustomerStatusFilter("all");
+                  setCustomerPage(1);
+                }}
                 active={customerStatusFilter === "all"}
               />
               <Stat
@@ -992,7 +1032,10 @@ function BillingApp({ auth, onLogout }) {
                 value={customers.filter(isOperationalActive).length}
                 note="Tidak terisolir dan tersambung"
                 icon={Wifi}
-                onClick={() => setCustomerStatusFilter("active")}
+                onClick={() => {
+                  setCustomerStatusFilter("active");
+                  setCustomerPage(1);
+                }}
                 active={customerStatusFilter === "active"}
               />
               <Stat
@@ -1003,7 +1046,10 @@ function BillingApp({ auth, onLogout }) {
                 }
                 note="Profile isolir aktif"
                 icon={AlertTriangle}
-                onClick={() => setCustomerStatusFilter("isolated")}
+                onClick={() => {
+                  setCustomerStatusFilter("isolated");
+                  setCustomerPage(1);
+                }}
                 active={customerStatusFilter === "isolated"}
               />
               <Stat
@@ -1011,7 +1057,10 @@ function BillingApp({ auth, onLogout }) {
                 value={customers.filter((c) => !Boolean(c.active)).length}
                 note="Tidak menerima invoice baru"
                 icon={Power}
-                onClick={() => setCustomerStatusFilter("inactive")}
+                onClick={() => {
+                  setCustomerStatusFilter("inactive");
+                  setCustomerPage(1);
+                }}
                 active={customerStatusFilter === "inactive"}
               />
             </div>
@@ -1086,7 +1135,7 @@ function BillingApp({ auth, onLogout }) {
                           "Status pelanggan",
                           "Status isolir",
                         ],
-                        ...filteredCustomers.map((c) => [
+                        ...matchingCustomers.map((c) => [
                           c.customer_code,
                           c.name,
                           c.phone,
@@ -1127,14 +1176,20 @@ function BillingApp({ auth, onLogout }) {
                   <input
                     placeholder="Cari nama, kode, PPPoE, nomor HP..."
                     value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setCustomerPage(1);
+                    }}
                   />
                 </div>
                 <label className="filter-select">
                   <span>Jenis layanan</span>
                   <select
                     value={customerServiceFilter}
-                    onChange={(e) => setCustomerServiceFilter(e.target.value)}
+                    onChange={(e) => {
+                      setCustomerServiceFilter(e.target.value);
+                      setCustomerPage(1);
+                    }}
                   >
                     <option value="all">Semua layanan</option>
                     <option value="internet">Internet</option>
@@ -1146,7 +1201,10 @@ function BillingApp({ auth, onLogout }) {
                   <span>Status pelanggan</span>
                   <select
                     value={customerStatusFilter}
-                    onChange={(e) => setCustomerStatusFilter(e.target.value)}
+                    onChange={(e) => {
+                      setCustomerStatusFilter(e.target.value);
+                      setCustomerPage(1);
+                    }}
                   >
                     <option value="all">Semua status</option>
                     <option value="active">Aktif / tersambung</option>
@@ -1155,13 +1213,78 @@ function BillingApp({ auth, onLogout }) {
                     <option value="not_connected">Belum konek MikroTik</option>
                   </select>
                 </label>
-                <button
-                  className="secondary"
-                  onClick={refreshCustomerStatuses}
-                  disabled={loading}
-                >
-                  <RefreshCw size={15} /> Cek status
-                </button>
+                <label className="filter-select">
+                  <span>Coverage Area</span>
+                  <select
+                    value={customerAreaFilter}
+                    onChange={(e) => {
+                      setCustomerAreaFilter(e.target.value);
+                      setCustomerPage(1);
+                    }}
+                  >
+                    <option value="all">Semua area</option>
+                    <option value="none">Belum ditentukan</option>
+                    {coverageAreas.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {auth.user.role !== "kolektor" && (
+                  <label className="filter-select">
+                    <span>Kolektor</span>
+                    <select
+                      value={customerCollectorFilter}
+                      onChange={(e) => {
+                        setCustomerCollectorFilter(e.target.value);
+                        setCustomerPage(1);
+                      }}
+                    >
+                      <option value="all">Semua kolektor</option>
+                      <option value="unassigned">Belum ditugaskan</option>
+                      {users
+                        .filter((u) => u.role === "kolektor")
+                        .map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                )}
+                <label className="filter-select">
+                  <span>Limit tampil</span>
+                  <select
+                    value={String(customerLimit)}
+                    onChange={(e) => {
+                      const val =
+                        e.target.value === "all"
+                          ? "all"
+                          : Number(e.target.value);
+                      setCustomerLimit(val);
+                      setCustomerPage(1);
+                    }}
+                  >
+                    <option value="10">10 baris</option>
+                    <option value="25">25 baris</option>
+                    <option value="50">50 baris</option>
+                    <option value="100">100 baris</option>
+                    <option value="all">
+                      Tampilkan semua ({matchingCustomers.length})
+                    </option>
+                  </select>
+                </label>
+                <label className="filter-select">
+                  <span>Status koneksi MikroTik</span>
+                  <button
+                    className="secondary"
+                    onClick={refreshCustomerStatuses}
+                    disabled={loading}
+                  >
+                    <RefreshCw size={15} /> Cek status
+                  </button>
+                </label>
                 {auth.user.role !== "kolektor" && (
                   <>
                     <label className="filter-select">
@@ -1217,12 +1340,20 @@ function BillingApp({ auth, onLogout }) {
                   </>
                 )}
               </div>
+
               <div className="table-wrap customer-table-wrap">
-                <table className="customer-table">
+                <table
+                  className="customer-table"
+                  style={{
+                    borderCollapse: "collapse",
+                    width: "100%",
+                    fontSize: "13px",
+                  }}
+                >
                   <thead>
                     <tr>
                       {auth.user.role !== "kolektor" && (
-                        <th>
+                        <th style={{ padding: "6px 6px", width: "28px" }}>
                           <input
                             type="checkbox"
                             aria-label="Pilih semua pelanggan"
@@ -1252,14 +1383,24 @@ function BillingApp({ auth, onLogout }) {
                           />
                         </th>
                       )}
-                      <th>Aksi</th>
-                      <th>Pelanggan</th>
-                      <th>Layanan / PPPoE</th>
-                      <th>Paket</th>
-                      <th>Billing / Tenggang</th>
-                      <th>Kolektor</th>
-                      <th>Status user</th>
-                      <th>Status / IP MikroTik</th>
+                      <th style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>
+                        Aksi
+                      </th>
+                      <th style={{ padding: "6px 8px" }}>Pelanggan</th>
+                      <th style={{ padding: "6px 8px" }}>Layanan / PPPoE</th>
+                      <th style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>
+                        Paket
+                      </th>
+                      <th style={{ padding: "6px 8px" }}>Billing / Tenggang</th>
+                      <th style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>
+                        Kolektor
+                      </th>
+                      <th style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>
+                        Status user
+                      </th>
+                      <th style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>
+                        Status / IP MikroTik
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1268,7 +1409,7 @@ function BillingApp({ auth, onLogout }) {
                       return (
                         <tr key={c.id}>
                           {auth.user.role !== "kolektor" && (
-                            <td>
+                            <td style={{ padding: "6px 6px" }}>
                               <input
                                 type="checkbox"
                                 aria-label={`Pilih ${c.name}`}
@@ -1285,13 +1426,21 @@ function BillingApp({ auth, onLogout }) {
                               />
                             </td>
                           )}
-                          <td>
-                            <div className="customer-row-actions">
+                          <td
+                            style={{ padding: "6px 8px", whiteSpace: "nowrap" }}
+                          >
+                            <div
+                              className="customer-row-actions"
+                              style={{ gap: "4px" }}
+                            >
                               <button
+                                type="button"
                                 className="small-btn"
                                 onClick={() => openCustomerDetail(c)}
+                                title="Detail pelanggan"
+                                aria-label={`Detail ${c.name}`}
                               >
-                                Detail
+                                <Info size={14} />
                               </button>
                               {auth.user.role !== "kolektor" &&
                                 c.service_type !== "tv_cable" &&
@@ -1311,24 +1460,42 @@ function BillingApp({ auth, onLogout }) {
                                         : "Isolir pelanggan ini saja"
                                     }
                                   >
-                                    {c.isolation_status === "isolated"
-                                      ? "Aktifkan"
-                                      : "Isolir"}
+                                    {c.isolation_status === "isolated" ? (
+                                      <>
+                                        <UserCheck size={15} /> Aktifkan
+                                      </>
+                                    ) : (
+                                      <>
+                                        <UserX size={15} /> Isolir
+                                      </>
+                                    )}
                                   </button>
                                 )}
                               <button
+                                type="button"
                                 className="small-btn"
                                 onClick={() => {
                                   setEditingCustomer(c);
                                   setShowForm(true);
                                 }}
+                                title="Edit pelanggan"
+                                aria-label={`Edit ${c.name}`}
                               >
-                                Edit
+                                <Pencil size={14} /> Edit
                               </button>
                               {auth.user.role !== "kolektor" && (
                                 <>
                                   <button
                                     className="small-btn"
+                                    style={{
+                                      backgroundColor: c.active
+                                        ? "#e22d2d"
+                                        : "#16a34a",
+                                      borderColor: c.active
+                                        ? "#e22d2d"
+                                        : "#16a34a",
+                                      color: "#ffffff",
+                                    }}
                                     onClick={() => toggleCustomerActive(c)}
                                     title={
                                       c.active
@@ -1336,7 +1503,7 @@ function BillingApp({ auth, onLogout }) {
                                         : "Aktifkan pelanggan"
                                     }
                                   >
-                                    <Power size={13} />
+                                    <Power size={15} />
                                     {c.active ? "Nonaktifkan" : "Aktifkan"}
                                   </button>
                                   <button
@@ -1350,7 +1517,7 @@ function BillingApp({ auth, onLogout }) {
                               )}
                             </div>
                           </td>
-                          <td>
+                          <td style={{ padding: "6px 8px" }}>
                             <b>{c.name}</b>
                             <small>
                               {c.customer_code} · {c.phone || "Tanpa nomor HP"}
@@ -1374,7 +1541,7 @@ function BillingApp({ auth, onLogout }) {
                               </small>
                             )}
                           </td>
-                          <td>
+                          <td style={{ padding: "6px 8px" }}>
                             {{
                               internet: "Internet",
                               tv_cable: "TV Kabel",
@@ -1385,11 +1552,13 @@ function BillingApp({ auth, onLogout }) {
                               {c.router_name ? ` · ${c.router_name}` : ""}
                             </small>
                           </td>
-                          <td>
+                          <td
+                            style={{ padding: "6px 8px", whiteSpace: "nowrap" }}
+                          >
                             {c.package_name || "—"}
                             <small>{money(c.package_price)}</small>
                           </td>
-                          <td>
+                          <td style={{ padding: "6px 8px" }}>
                             Invoice tgl.{" "}
                             {c.invoice_day_effective ||
                               c.invoice_day_override ||
@@ -1410,8 +1579,14 @@ function BillingApp({ auth, onLogout }) {
                               hari
                             </small>
                           </td>
-                          <td>{c.collector_name || "Belum ditugaskan"}</td>
-                          <td>
+                          <td
+                            style={{ padding: "6px 8px", whiteSpace: "nowrap" }}
+                          >
+                            {c.collector_name || "Belum ditugaskan"}
+                          </td>
+                          <td
+                            style={{ padding: "6px 8px", whiteSpace: "nowrap" }}
+                          >
                             <span
                               className={"pill " + (c.active ? "green" : "red")}
                             >
@@ -1423,7 +1598,9 @@ function BillingApp({ auth, onLogout }) {
                                 : "Invoice baru dihentikan"}
                             </small>
                           </td>
-                          <td>
+                          <td
+                            style={{ padding: "6px 8px", whiteSpace: "nowrap" }}
+                          >
                             <span
                               className={
                                 "pill " +
@@ -1476,6 +1653,50 @@ function BillingApp({ auth, onLogout }) {
                     )}
                   </tbody>
                 </table>
+              </div>
+              <div
+                className="toolbar"
+                style={{ justifyContent: "space-between", marginTop: "10px" }}
+              >
+                <small className="helper-text">
+                  Menampilkan{" "}
+                  <b>
+                    {matchingCustomers.length === 0 ? 0 : startIdx + 1}–
+                    {Math.min(
+                      startIdx + filteredCustomers.length,
+                      matchingCustomers.length,
+                    )}
+                  </b>{" "}
+                  dari <b>{matchingCustomers.length}</b> pelanggan terfilter
+                  (total {customers.length} pelanggan)
+                </small>
+                {customerLimit !== "all" && totalCustomerPages > 1 && (
+                  <div className="welcome-actions">
+                    <button
+                      type="button"
+                      className="small-btn"
+                      disabled={safeCustomerPage <= 1}
+                      onClick={() => setCustomerPage((p) => Math.max(p - 1, 1))}
+                    >
+                      Sebelumnya
+                    </button>
+                    <span className="helper-text">
+                      Hal {safeCustomerPage} / {totalCustomerPages}
+                    </span>
+                    <button
+                      type="button"
+                      className="small-btn"
+                      disabled={safeCustomerPage >= totalCustomerPages}
+                      onClick={() =>
+                        setCustomerPage((p) =>
+                          Math.min(p + 1, totalCustomerPages),
+                        )
+                      }
+                    >
+                      Berikutnya
+                    </button>
+                  </div>
+                )}
               </div>
             </section>
           </>
@@ -1794,41 +2015,108 @@ function BillingApp({ auth, onLogout }) {
           />
         )}
 
-        {page === "Manajemen Kolektor" &&
-          ["superadmin", "admin"].includes(auth.user.role) && (
-            <>
-              <div className="stats compact-stats">
-                {collectorSummary.map((item) => (
-                  <Stat
-                    key={item.collector_id ?? "unassigned"}
-                    title={item.collector_name}
-                    value={`${item.total_customers} Pelanggan`}
-                    note={`Aktif: ${item.active_customers || 0} · Terisolir: ${item.isolated_customers || 0}`}
-                    icon={UserCog}
-                  />
-                ))}
-              </div>
+{page === "Manajemen Kolektor" &&
+          ["superadmin", "admin"].includes(auth.user.role) && (() => {
+            const activeCollector =
+              selectedCollectorId === undefined
+                ? null
+                : collectorSummary.find(
+                    (item) =>
+                      String(item.collector_id ?? "unassigned") ===
+                      String(selectedCollectorId),
+                  );
 
-              {collectorSummary.map((item) => {
-                const memberCustomers = customers.filter((c) =>
-                  item.collector_id === null
+            const memberCustomers = activeCollector
+              ? customers.filter((c) =>
+                  activeCollector.collector_id === null
                     ? !c.collector_id
-                    : Number(c.collector_id) === Number(item.collector_id),
-                );
-                return (
-                  <section
-                    className="panel"
-                    key={item.collector_id ?? "unassigned"}
-                  >
+                    : Number(c.collector_id) ===
+                      Number(activeCollector.collector_id),
+                )
+              : [];
+
+            return (
+              <>
+                <section className="panel">
+                  <div className="panel-head">
+                    <div>
+                      <h3>Manajemen Kolektor</h3>
+                      <p>
+                        Ringkasan jumlah pelanggan per kolektor. Klik Detail
+                        Pelanggan untuk melihat daftar yang diurus.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Kolektor</th>
+                          <th>Jumlah Pelanggan</th>
+                          <th>Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {collectorSummary.map((item) => {
+                          const key = item.collector_id ?? "unassigned";
+                          const isSelected =
+                            String(selectedCollectorId) === String(key);
+                          return (
+                            <tr key={key}>
+                              <td>
+                                <b>{item.collector_name}</b>
+                              </td>
+                              <td>
+                                <b>{item.total_customers}</b> pelanggan
+                              </td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="small-btn"
+                                  onClick={() =>
+                                    setSelectedCollectorId(
+                                      isSelected ? null : key,
+                                    )
+                                  }
+                                >
+                                  {isSelected
+                                    ? "Tutup Detail"
+                                    : "Detail Pelanggan"}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {collectorSummary.length === 0 && (
+                          <tr>
+                            <td colSpan="3" className="empty-cell">
+                              Belum ada data kolektor.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+
+                {activeCollector && (
+                  <section className="panel">
                     <div className="panel-head">
                       <div>
-                        <h3>{item.collector_name}</h3>
+                        <h3>
+                          Daftar Pelanggan — {activeCollector.collector_name}
+                        </h3>
                         <p>
-                          Total {item.total_customers} pelanggan ·{" "}
-                          {item.active_customers || 0} aktif ·{" "}
-                          {item.isolated_customers || 0} terisolir
+                          Total {memberCustomers.length} pelanggan yang diurus
                         </p>
                       </div>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => setSelectedCollectorId(null)}
+                      >
+                        Tutup
+                      </button>
                     </div>
                     <div className="table-wrap">
                       <table>
@@ -1870,6 +2158,7 @@ function BillingApp({ auth, onLogout }) {
                               </td>
                               <td>
                                 <button
+                                  type="button"
                                   className="small-btn"
                                   onClick={() => openCustomerDetail(c)}
                                 >
@@ -1889,10 +2178,10 @@ function BillingApp({ auth, onLogout }) {
                       </table>
                     </div>
                   </section>
-                );
-              })}
-            </>
-          )}
+                )}
+              </>
+            );
+          })()}
 
         {page === "Profile" && (
           <ProfilePage
@@ -3517,9 +3806,15 @@ function CustomerDetailPage({ loading, data, live, onPay }) {
         </div>
         <div>
           <small>IP Address MikroTik</small>
-          <b><a href={`http://${live?.ip || "—"}`} target="_blank" rel="noreferrer">
-            {live?.ip || "—"}
-          </a></b>
+          <b>
+            <a
+              href={`http://${live?.ip || "—"}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {live?.ip || "—"}
+            </a>
+          </b>
         </div>
         <div>
           <small>Status isolir</small>
@@ -4782,7 +5077,7 @@ function SettingsPage({ onSaved, onError }) {
   );
 }
 const DEFAULT_PRINT_TEMPLATES = {
-  a4: `<!doctype html><html><head><meta charset="utf-8"><title>Bukti Pembayaran {{invoice_number}}</title><style>@page{size:A4;margin:14mm}*{box-sizing:border-box}body{font:13px Arial,sans-serif;color:#202938;margin:0}.receipt{max-width:760px;margin:0 auto}.head{text-align:center;border-bottom:2px solid #243247;padding:0 0 16px}.head h1{font-size:24px;margin:0 0 6px}.head h2{font-size:17px;margin:0}.muted{color:#667085}.section{margin-top:20px}.section h3{font-size:14px;border-bottom:1px solid #d0d5dd;padding-bottom:7px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px}.item{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #eaecf0}.item span{color:#667085}.item b{text-align:right}.total{margin-top:18px;padding:14px;background:#f2f5fa;font-size:17px;font-weight:bold;display:flex;justify-content:space-between}.sign{text-align:right;margin-top:55px}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border:1px solid #d0d5dd;padding:9px;text-align:left}th{background:#f2f4f7}@media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}}</style></head><body><main class="receipt"><header class="head"><h1>{{brand_name}}</h1><h2>BUKTI PEMBAYARAN</h2><p>{{invoice_number}} · Kwitansi {{receipt_number}}</p></header><section class="section"><h3>Informasi Pelanggan</h3><div class="grid"><div class="item"><span>Nama pelanggan</span><b>{{customer_name}}</b></div><div class="item"><span>Kode pelanggan</span><b>{{customer_code}}</b></div><div class="item"><span>No. HP</span><b>{{customer_phone}}</b></div><div class="item"><span>Layanan</span><b>{{service_type}}</b></div><div class="item"><span>Alamat</span><b>{{customer_address}}</b></div><div class="item"><span>Paket</span><b>{{package_name}}</b></div><div class="item"><span>Periode</span><b>{{period_start}} s.d. {{period_end}}</b></div><div class="item"><span>Jatuh tempo</span><b>{{due_date}}</b></div></div></section><section class="section"><h3>Rincian Pembayaran</h3><div class="item"><span>Total tagihan</span><b>{{invoice_amount}}</b></div><div class="item"><span>Total dibayar</span><b>{{paid_amount}}</b></div><div class="item"><span>Sisa tagihan</span><b>{{remaining_amount}}</b></div><div class="item"><span>Tanggal pembayaran terakhir</span><b>{{payment_date}}</b></div><div class="item"><span>Metode pembayaran</span><b>{{payment_method}}</b></div><div class="item"><span>Referensi</span><b>{{payment_reference}}</b></div><div class="item"><span>Rekening</span><b>{{bank_name}} · {{account_number}} · {{account_name}}</b></div><div class="total"><span>TOTAL DIBAYAR</span><span>{{paid_amount}}</span></div></section><section class="section"><h3>Riwayat Pembayaran ({{payment_count}} transaksi)</h3><table><thead><tr><th>Tanggal</th><th>Metode</th><th>No. Kwitansi</th><th>Nominal</th></tr></thead><tbody>{{payment_rows}}</tbody></table></section><div class="sign"><p>{{payment_date}}</p><p>Petugas: {{created_by}}</p><br><p>(________________________)</p></div></main></body></html>`,
+  a4: `<!doctype html><html><head><meta charset="utf-8"><title>Bukti Pembayaran {{invoice_number}}</title><style>@page{size:A4;margin:14mm}*{box-sizing:border-box}body{font:13px Arial,sans-serif;color:#202938;margin:0}.receipt{max-width:760px;margin:0 auto}.head{text-align:center;border-bottom:2px solid #243247;padding:0 0 16px}.head h1{font-size:24px;margin:0 0 6px}.head h2{font-size:17px;margin:0}.muted{color:#667085}.section{margin-top:20px}.section h3{font-size:14px;border-bottom:1px solid #d0d5dd;padding-bottom:7px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px}.item{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #eaecf0}.item span{color:#667085}.item b{text-align:right}.total{margin-top:18px;padding:14px;background:#f2f5fa;font-size:17px;font-weight:bold;display:flex;justify-content:space-between}.sign{text-align:right;margin-top:55px}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border:1px solid #d0d5dd;padding:9px;text-align:left}th{background:#f2f4f7}@media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}}</style></head><body><main class="receipt"><header class="head"><h1>{{brand_name}}</h1><h2>BUKTI PEMBAYARAN</h2><p>{{invoice_number}} · Kwitansi {{receipt_number}}</p></header><section class="section"><h3>Informasi Pelanggan</h3><div class="grid"><div class="item"><span>Nama pelanggan</span><b>{{customer_name}}</b></div><div class="item"><span>Kode pelanggan</span><b>{{customer_code}}</b></div><div class="item"><span>No. HP</span><b>{{customer_phone}}</b></div><div class="item"><span>Layanan</span><b>{{service_type}}</b></div><div class="item"><span>Alamat</span><b>{{customer_address}}</b></div><div class="item"><span>Paket</span><b>{{package_name}}</b></div><div class="item"><span>Periode</span><b>{{period_start}} s.d. {{period_end}}</b></div><div class="item"><span>Jatuh tempo</span><b>{{due_date}}</b></div></div></section><section class="section"><h3>Rincian Pembayaran</h3><div class="item"><span>Total tagihan</span><b>{{invoice_amount}}</b></div><div class="item"><span>Total dibayar</span><b>{{paid_amount}}</b></div><div class="item"><span>Sisa tagihan</span><b>{{remaining_amount}}</b></div><div class="item"><span>Tanggal pembayaran terakhir</span><b>{{payment_date}}</b></div><div className="item"><span>Metode pembayaran</span><b>{{payment_method}}</b></div><div class="item"><span>Referensi</span><b>{{payment_reference}}</b></div><div class="item"><span>Rekening</span><b>{{bank_name}} · {{account_number}} · {{account_name}}</b></div><div class="total"><span>TOTAL DIBAYAR</span><span>{{paid_amount}}</span></div></section><section class="section"><h3>Riwayat Pembayaran ({{payment_count}} transaksi)</h3><table><thead><tr><th>Tanggal</th><th>Metode</th><th>No. Kwitansi</th><th>Nominal</th></tr></thead><tbody>{{payment_rows}}</tbody></table></section><div class="sign"><p>{{payment_date}}</p><p>Petugas: {{created_by}}</p><br><p>(________________________)</p></div></main></body></html>`,
   mm58: `<!doctype html><html><head><meta charset="utf-8"><title>Struk {{invoice_number}}</title><style>@page{size:58mm auto;margin:2mm}*{box-sizing:border-box}body{width:54mm;margin:0 auto;font:10px/1.4 Arial,sans-serif;color:#000}.receipt{width:100%}.head{text-align:center;border-bottom:1px dashed #000;padding-bottom:6px;margin-bottom:6px}.head h1{font-size:13px;margin:0 0 3px}.head h2{font-size:11px;margin:0}.section{margin:7px 0}.section h3{font-size:10px;text-align:center;border-bottom:1px dashed #000;padding-bottom:3px}.item{display:flex;justify-content:space-between;gap:4px;margin:3px 0}.item span{flex:1}.item b{text-align:right;overflow-wrap:anywhere;max-width:62%}.total{font-weight:bold;font-size:12px;border-top:1px dashed #000;padding-top:5px;margin-top:6px;display:flex;justify-content:space-between}.sign{text-align:center;margin-top:10px}table{width:100%;border-collapse:collapse;font-size:9px}th,td{text-align:left;padding:2px 0;border-bottom:1px dashed #999}@media print{body{width:54mm}}</style></head><body><main class="receipt"><header class="head"><h1>{{brand_name}}</h1><h2>TAGIHAN / BUKTI BAYAR</h2><p>{{invoice_number}}</p></header><section class="section"><div class="item"><span>Tanggal</span><b>{{issue_date}}</b></div><div class="item"><span>Jatuh tempo</span><b>{{due_date}}</b></div><div class="item"><span>Pelanggan</span><b>{{customer_name}}</b></div><div class="item"><span>Kode</span><b>{{customer_code}}</b></div><div class="item"><span>HP</span><b>{{customer_phone}}</b></div><div class="item"><span>Alamat</span><b>{{customer_address}}</b></div><div class="item"><span>Layanan</span><b>{{service_type}}</b></div><div class="item"><span>Paket</span><b>{{package_name}}</b></div><div class="item"><span>Periode</span><b>{{period_start}} - {{period_end}}</b></div></section><section class="section"><div class="item"><span>Total</span><b>{{invoice_amount}}</b></div><div class="item"><span>Dibayar</span><b>{{paid_amount}}</b></div><div class="total"><span>SISA</span><span>{{remaining_amount}}</span></div><div class="item"><span>Metode</span><b>{{payment_method}}</b></div><div class="item"><span>Status</span><b>{{payment_reference}}</b></div></section><section class="section"><div class="item"><span>Rekening</span><b>{{bank_name}}</b></div><div class="item"><span>No. Rek</span><b>{{account_number}}</b></div></section><div class="sign">Terima kasih<br>{{payment_date}}<br>Petugas: {{created_by}}</div></main></body></html>`,
 };
 const PRINT_TEMPLATE_VARIABLES = [
