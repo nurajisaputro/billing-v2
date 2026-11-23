@@ -520,11 +520,78 @@ function BillingApp({ auth, onLogout }) {
         api(`/invoices/${invoice.id}/print`),
         api("/receipt-template"),
       ]);
+
+      let matchedPayment =
+        Array.isArray(v.payments) && v.payments.length > 0
+          ? v.payments[0]
+          : (paymentHistory?.rows || []).find(
+              (row) =>
+                Number(row.invoice_id) === Number(invoice.id) ||
+                String(row.invoice_number || "") ===
+                  String(v.invoice_number || invoice.invoice_number || ""),
+            ) || null;
+
+      let receiptData = null;
+      if (
+        !matchedPayment &&
+        !v.payment_date &&
+        !v.payment_method &&
+        !v.payment_reference &&
+        (Number(v.paid_amount || 0) > 0 || invoice.status === "paid")
+      ) {
+        try {
+          receiptData = await api(`/invoices/${invoice.id}/receipt`);
+          if (
+            Array.isArray(receiptData?.payments) &&
+            receiptData.payments.length > 0
+          ) {
+            matchedPayment = receiptData.payments[0];
+          }
+        } catch {
+          // abaikan jika endpoint receipt tidak mengembalikan data
+        }
+      }
+
+      const rawDate =
+        v.payment_date ||
+        v.latest_paid_at ||
+        receiptData?.latest_paid_at ||
+        matchedPayment?.paid_at ||
+        "";
+      const rawMethod =
+        v.payment_method ||
+        v.latest_method ||
+        receiptData?.latest_method ||
+        matchedPayment?.method ||
+        "";
+      const rawRef =
+        v.payment_reference ||
+        v.latest_reference ||
+        receiptData?.latest_reference ||
+        matchedPayment?.reference_number ||
+        matchedPayment?.receipt_number ||
+        "-";
+
+      const fmtPaymentDate = (x) =>
+        x
+          ? new Date(x).toLocaleString("id-ID", {
+              dateStyle: "medium",
+              timeStyle: "short",
+            })
+          : "-";
+
+      const hasPayRef =
+      Boolean(String(rawRef || "").trim()) && String(rawRef).trim() !== "-";
+      const paymentStatusText = hasPayRef ? "Lunas" : "Belum lunas";
       const template = stored.templates?.mm58 || DEFAULT_PRINT_TEMPLATES.mm58;
       const values = {
         brand_name: v.brand_name || brand,
         invoice_number: v.invoice_number,
-        receipt_number: "-",
+        receipt_number:
+          v.receipt_number ||
+          receiptData?.receipt_number ||
+          matchedPayment?.receipt_number ||
+          "-",
         customer_name: v.customer_name,
         customer_code: v.customer_code,
         customer_phone: v.phone || "-",
@@ -543,15 +610,44 @@ function BillingApp({ auth, onLogout }) {
         remaining_amount: money(
           Math.max(0, Number(v.amount || 0) - Number(v.paid_amount || 0)),
         ),
-        payment_date: "-",
-        payment_method: "-",
-        payment_reference: "-",
-        bank_name: "-",
-        account_name: "-",
-        account_number: "-",
-        payment_count: "0",
-        created_by: v.created_by || "-",
-        payment_rows: "",
+        payment_date: fmtPaymentDate(rawDate),
+        payment_method:
+          rawMethod === "transfer"
+            ? "Transfer"
+            : rawMethod === "cash"
+              ? "Cash"
+              : rawMethod || "-",
+        payment_reference: paymentStatusText,
+        bank_name:
+          v.bank_name ||
+          receiptData?.bank_name ||
+          matchedPayment?.bank_name ||
+          "-",
+        account_name:
+          v.account_name ||
+          receiptData?.account_name ||
+          matchedPayment?.account_name ||
+          "-",
+        account_number:
+          v.account_number ||
+          receiptData?.account_number ||
+          matchedPayment?.account_number ||
+          "-",
+        payment_count: String(
+          v.payment_count ??
+            receiptData?.payment_count ??
+            (Array.isArray(receiptData?.payments)
+              ? receiptData.payments.length
+              : matchedPayment
+                ? 1
+                : 0),
+        ),
+        created_by:
+          v.created_by ||
+          receiptData?.created_by ||
+          matchedPayment?.created_by ||
+          "-",
+        payment_rows: v.payment_rows || "",
       };
       const html = renderPrintTemplate(template, values);
       const actions =
@@ -5877,14 +5973,16 @@ function App() {
       localStorage.setItem("billing_user", JSON.stringify(u));
     },
   };
-  return Capacitor.isNativePlatform() ? (
+  const forceMobile =
+    new URLSearchParams(window.location.search).get("mobile") === "1";
+  return Capacitor.isNativePlatform() || forceMobile ? (
     <>
       <MobileBillingApp
         key={auth.user.id}
         auth={mobileAuth}
         onLogout={logout}
       />
-      <AppUpdateChecker />
+      {Capacitor.isNativePlatform() && <AppUpdateChecker />}
     </>
   ) : (
     <BillingApp key={auth.user.id} auth={mobileAuth} onLogout={logout} />
