@@ -166,10 +166,10 @@ function BillingApp({ auth, onLogout }) {
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [invoiceFilter, setInvoiceFilter] = useState("all");
   const [invoiceMonth, setInvoiceMonth] = useState(() =>
-  new Date()
-    .toLocaleDateString("sv-SE", { timeZone: "Asia/Jakarta" })
-    .slice(0, 7),
-);
+    new Date()
+      .toLocaleDateString("sv-SE", { timeZone: "Asia/Jakarta" })
+      .slice(0, 7),
+  );
   const [globalSearch, setGlobalSearch] = useState("");
   const [detailCustomer, setDetailCustomer] = useState(null);
   const [customerDetail, setCustomerDetail] = useState(null);
@@ -581,7 +581,7 @@ function BillingApp({ auth, onLogout }) {
           : "-";
 
       const hasPayRef =
-      Boolean(String(rawRef || "").trim()) && String(rawRef).trim() !== "-";
+        Boolean(String(rawRef || "").trim()) && String(rawRef).trim() !== "-";
       const paymentStatusText = hasPayRef ? "Lunas" : "Belum lunas";
       const template = stored.templates?.mm58 || DEFAULT_PRINT_TEMPLATES.mm58;
       const values = {
@@ -1874,179 +1874,289 @@ function BillingApp({ auth, onLogout }) {
           </section>
         )}
         {page === "Tagihan" &&
-          (() => {
-            const monthNow = new Date()
-              .toLocaleDateString("sv-SE", { timeZone: "Asia/Jakarta" })
-              .slice(0, 7);
-            const activeMonth = invoiceMonth || monthNow;
+  (() => {
+    const monthNow = new Date()
+      .toLocaleDateString("sv-SE", { timeZone: "Asia/Jakarta" })
+      .slice(0, 7);
+    const activeMonth = invoiceMonth || monthNow;
 
-            const [y, m] = activeMonth.split("-").map(Number);
-            const prevMonth = new Date(Date.UTC(y, m - 2, 1))
-              .toISOString()
-              .slice(0, 7);
+    const [y, m] = activeMonth.split("-").map(Number);
+    const prevMonth = new Date(Date.UTC(y, m - 2, 1))
+      .toISOString()
+      .slice(0, 7);
 
-            const isCurrentMonth = activeMonth === monthNow;
-            const monthInvoices = invoices.filter(
-              (i) => String(i.period_month || "") === activeMonth,
-            );
+    const isCurrentMonth = activeMonth === monthNow;
+    const monthInvoices = invoices.filter(
+      (i) => String(i.period_month || "") === activeMonth,
+    );
 
-            const unpaidInvoices = monthInvoices.filter((i) =>
-              ["unpaid", "partial"].includes(i.status),
-            );
-            const paidInvoices = monthInvoices.filter(
-              (i) => i.status === "paid",
-            );
-            const unpaidTotal = unpaidInvoices.reduce(
-              (n, i) => n + Number(i.amount - i.paid_amount),
-              0,
-            );
-            const paidTotal = paidInvoices.reduce(
-              (n, i) => n + Number(i.amount),
-              0,
-            );
+    const unpaidInvoices = monthInvoices.filter((i) =>
+      ["unpaid", "partial"].includes(i.status),
+    );
+    const paidInvoices = monthInvoices.filter(
+      (i) => i.status === "paid",
+    );
+    const unpaidTotal = unpaidInvoices.reduce(
+      (n, i) => n + Number(i.amount - i.paid_amount),
+      0,
+    );
+    const paidTotal = paidInvoices.reduce(
+      (n, i) => n + Number(i.amount),
+      0,
+    );
 
-            return (
-              <section className="panel">
-                <div className="panel-head payment-filter-head">
-                  <div>
-                    <h3>
-                      {isCurrentMonth
-                        ? "Tagihan Bulan Ini"
-                        : `Riwayat Tagihan (${activeMonth})`}
-                    </h3>
-                    <p>
-                      {isCurrentMonth
-                        ? "Kelola tagihan periode berjalan, lihat bulan lalu, atau generate tagihan baru."
-                        : `Menampilkan tagihan periode ${activeMonth}.`}
-                    </p>
-                  </div>
-                  <div className="welcome-actions">
-                    {!isCurrentMonth && (
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => {
-                          setInvoiceMonth(monthNow);
-                          setInvoiceFilter("all");
-                        }}
-                      >
-                        Bulan Ini ({monthNow})
-                      </button>
-                    )}
-                    <label className="month-filter">
-                      <span>Bulan tagihan</span>
-                      <input
-                        type="month"
-                        value={activeMonth}
-                        onChange={(e) => {
-                          if (e.target.value) {
-                            setInvoiceMonth(e.target.value);
-                            setInvoiceFilter("all");
-                          }
-                        }}
-                      />
-                    </label>
-                    <button className="primary" onClick={generate}>
-                      <Plus size={17} /> Generate Tagihan
-                    </button>
-                  </div>
-                </div>
+    const filteredInvoices = monthInvoices.filter(
+      (i) =>
+        (invoiceFilter === "all" ||
+          (invoiceFilter === "unpaid"
+            ? ["unpaid", "partial"].includes(i.status)
+            : i.status === invoiceFilter)) &&
+        `${i.invoice_number} ${i.customer_name} ${i.customer_code}`
+          .toLowerCase()
+          .includes(invoiceSearch.toLowerCase()),
+    );
 
-                <div className="payment-summary">
-                  <div>
-                    <span>Belum lunas ({unpaidInvoices.length})</span>
-                    <strong>{money(unpaidTotal)}</strong>
-                  </div>
-                  <div>
-                    <span>Lunas ({paidInvoices.length})</span>
-                    <strong>{money(paidTotal)}</strong>
-                  </div>
-                  <div>
-                    <span>Total tagihan</span>
-                    <strong>{monthInvoices.length}</strong>
-                  </div>
-                  <div>
-                    <span>Periode</span>
-                    <strong>{activeMonth}</strong>
-                  </div>
-                </div>
+    function exportInvoicesToExcel(rows, label = "semua") {
+      if (!Array.isArray(rows) || rows.length === 0) {
+        setError("Tidak ada data tagihan untuk diexport.");
+        return;
+      }
 
-                <div className="toolbar">
-                  <div className="search">
-                    <Search size={17} />
-                    <input
-                      placeholder="Cari nomor tagihan, nama atau kode pelanggan..."
-                      value={invoiceSearch}
-                      onChange={(e) => setInvoiceSearch(e.target.value)}
-                    />
-                  </div>
-                  <label className="filter-select">
-                    <span>Status tagihan</span>
-                    <select
-                      value={invoiceFilter}
-                      onChange={(e) => setInvoiceFilter(e.target.value)}
-                    >
-                      <option value="all">Semua status</option>
-                      <option value="unpaid">Belum lunas / sebagian</option>
-                      <option value="paid">Lunas</option>
-                    </select>
-                  </label>
-                </div>
+      const escapeHtml = (val) =>
+        String(val ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
 
-                <InvoiceTable
-                  rows={monthInvoices.filter(
-                    (i) =>
-                      (invoiceFilter === "all" ||
-                        (invoiceFilter === "unpaid"
-                          ? ["unpaid", "partial"].includes(i.status)
-                          : i.status === invoiceFilter)) &&
-                      `${i.invoice_number} ${i.customer_name} ${i.customer_code}`
-                        .toLowerCase()
-                        .includes(invoiceSearch.toLowerCase()),
-                  )}
-                  onPay={payment}
-                  onPrint={printInvoiceThermal}
-                  onPrintPaid={printInvoiceReceipt}
-                  onDelete={async (invoice) => {
-                    if (
-                      !window.confirm(
-                        `Hapus tagihan ${invoice.invoice_number}? Pembayaran yang terkait juga akan dihapus. Tindakan ini tidak dapat dibatalkan.`,
-                      )
-                    )
-                      return;
-                    try {
-                      await api(`/invoices/${invoice.id}`, {
-                        method: "DELETE",
-                      });
-                      setNotice(`Tagihan ${invoice.invoice_number} dihapus.`);
-                      load();
-                      if (page === "Pembayaran")
-                        loadPaymentHistory(paymentMonth);
-                    } catch (e) {
-                      setError(e.message);
-                    }
-                  }}
-                  onNunggak={async (invoice) => {
-                    try {
-                      const skip = !Boolean(invoice.skip_isolation);
-                      await api(`/invoices/${invoice.id}/nunggak`, {
-                        method: "PUT",
-                        body: JSON.stringify({ skip }),
-                      });
-                      setNotice(
-                        skip
-                          ? `NUNGGAK diaktifkan untuk ${invoice.invoice_number}; isolir bulan ini dilewati.`
-                          : `Pengecualian NUNGGAK dihapus untuk ${invoice.invoice_number}.`,
-                      );
-                      load();
-                    } catch (e) {
-                      setError(e.message);
-                    }
-                  }}
-                />
-              </section>
-            );
-          })()}
+      const headers = [
+        "No",
+        "No. Tagihan",
+        "Kode Pelanggan",
+        "Nama Pelanggan",
+        "Alamat",
+        "Periode",
+        "Jatuh Tempo",
+        "Total Tagihan",
+        "Sudah Dibayar",
+        "Sisa Tagihan",
+        "Status",
+      ];
+
+      const bodyRows = rows
+        .map((inv, idx) => {
+          const amount = Number(inv.amount || 0);
+          const paidAmount = Number(inv.paid_amount || 0);
+          const remaining = Math.max(0, amount - paidAmount);
+          const statusText =
+            inv.status === "paid"
+              ? "Lunas"
+              : inv.status === "partial"
+                ? "Sebagian"
+                : "Belum bayar";
+
+          return `<tr>
+        <td>${idx + 1}</td>
+        <td>${escapeHtml(inv.invoice_number)}</td>
+        <td>${escapeHtml(inv.customer_code)}</td>
+        <td>${escapeHtml(inv.customer_name)}</td>
+        <td>${escapeHtml(inv.address || "-")}</td>
+        <td>${escapeHtml(inv.period_month || String(inv.period_start || "").slice(0, 7))}</td>
+        <td>${escapeHtml(String(inv.due_date || "").slice(0, 10))}</td>
+        <td>${amount}</td>
+        <td>${paidAmount}</td>
+        <td>${remaining}</td>
+        <td>${statusText}</td>
+      </tr>`;
+        })
+        .join("");
+
+      const html = `
+  <html xmlns:o="urn:schemas-microsoft-com:office:office"
+        xmlns:x="urn:schemas-microsoft-com:office:excel"
+        xmlns="http://www.w3.org/TR/REC-html40">
+    <head>
+      <meta charset="utf-8" />
+      <style>
+        body, table, th, td {
+          font-family: "Calibri", "Arial", sans-serif;
+          font-size: 11pt;
+        }
+        th {
+          font-weight: bold;
+        }
+      </style>
+    </head>
+    <body>
+      <table border="1">
+        <thead>
+          <tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr>
+        </thead>
+        <tbody>${bodyRows}</tbody>
+      </table>
+    </body>
+  </html>
+`;
+
+      const blob = new Blob(["\uFEFF" + html], {
+        type: "application/vnd.ms-excel;charset=utf-8;",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const today = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `tagihan-${label}-${today}.xls`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setNotice(`Berhasil mengexport ${rows.length} data tagihan ke Excel.`);
+    }
+
+    return (
+      <section className="panel">
+        <div className="panel-head payment-filter-head">
+          <div>
+            <h3>
+              {isCurrentMonth
+                ? "Tagihan Bulan Ini"
+                : `Riwayat Tagihan (${activeMonth})`}
+            </h3>
+            <p>
+              {isCurrentMonth
+                ? "Kelola tagihan periode berjalan, lihat bulan lalu, atau generate tagihan baru."
+                : `Menampilkan tagihan periode ${activeMonth}.`}
+            </p>
+          </div>
+          <div className="welcome-actions">
+            {!isCurrentMonth && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setInvoiceMonth(monthNow);
+                  setInvoiceFilter("all");
+                }}
+              >
+                Bulan Ini ({monthNow})
+              </button>
+            )}
+            <label className="month-filter">
+              <span>Bulan tagihan</span>
+              <input
+                type="month"
+                value={activeMonth}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setInvoiceMonth(e.target.value);
+                    setInvoiceFilter("all");
+                  }
+                }}
+              />
+            </label>
+            <button className="primary" onClick={generate}>
+              <Plus size={17} /> Generate Tagihan
+            </button>
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() =>
+                exportInvoicesToExcel(
+                  filteredInvoices,
+                  invoiceFilter || "all",
+                )
+              }
+            >
+              Export Excel
+            </button>
+          </div>
+        </div>
+
+        <div className="payment-summary">
+          <div>
+            <span>Belum lunas ({unpaidInvoices.length})</span>
+            <strong>{money(unpaidTotal)}</strong>
+          </div>
+          <div>
+            <span>Lunas ({paidInvoices.length})</span>
+            <strong>{money(paidTotal)}</strong>
+          </div>
+          <div>
+            <span>Total tagihan</span>
+            <strong>{monthInvoices.length}</strong>
+          </div>
+          <div>
+            <span>Periode</span>
+            <strong>{activeMonth}</strong>
+          </div>
+        </div>
+
+        <div className="toolbar">
+          <div className="search">
+            <Search size={17} />
+            <input
+              placeholder="Cari nomor tagihan, nama atau kode pelanggan..."
+              value={invoiceSearch}
+              onChange={(e) => setInvoiceSearch(e.target.value)}
+            />
+          </div>
+          <label className="filter-select">
+            <span>Status tagihan</span>
+            <select
+              value={invoiceFilter}
+              onChange={(e) => setInvoiceFilter(e.target.value)}
+            >
+              <option value="all">Semua status</option>
+              <option value="unpaid">Belum lunas / sebagian</option>
+              <option value="paid">Lunas</option>
+            </select>
+          </label>
+        </div>
+
+        <InvoiceTable
+          rows={filteredInvoices}
+          onPay={payment}
+          onPrint={printInvoiceThermal}
+          onPrintPaid={printInvoiceReceipt}
+          onDelete={async (invoice) => {
+            if (
+              !window.confirm(
+                `Hapus tagihan ${invoice.invoice_number}? Pembayaran yang terkait juga akan dihapus. Tindakan ini tidak dapat dibatalkan.`,
+              )
+            )
+              return;
+            try {
+              await api(`/invoices/${invoice.id}`, {
+                method: "DELETE",
+              });
+              setNotice(`Tagihan ${invoice.invoice_number} dihapus.`);
+              load();
+              if (page === "Pembayaran")
+                loadPaymentHistory(paymentMonth);
+            } catch (e) {
+              setError(e.message);
+            }
+          }}
+          onNunggak={async (invoice) => {
+            try {
+              const skip = !Boolean(invoice.skip_isolation);
+              await api(`/invoices/${invoice.id}/nunggak`, {
+                method: "PUT",
+                body: JSON.stringify({ skip }),
+              });
+              setNotice(
+                skip
+                  ? `NUNGGAK diaktifkan untuk ${invoice.invoice_number}; isolir bulan ini dilewati.`
+                  : `Pengecualian NUNGGAK dihapus untuk ${invoice.invoice_number}.`,
+              );
+              load();
+            } catch (e) {
+              setError(e.message);
+            }
+          }}
+        />
+      </section>
+    );
+  })()}
         {page === "Paket" && (
           <PackagePage
             packages={packages}
@@ -2411,7 +2521,10 @@ function BillingApp({ auth, onLogout }) {
                               <td>{c.customer_code}</td>
                               <td>
                                 <b>{c.name}</b>
-                                <small>{c.address || "Tanpa Alamat"} - {c.phone || "Tanpa Nomor HP"}</small>
+                                <small>
+                                  {c.address || "Tanpa Alamat"} -{" "}
+                                  {c.phone || "Tanpa Nomor HP"}
+                                </small>
                               </td>
                               <td>{c.package_name || "—"}</td>
                               <td>
